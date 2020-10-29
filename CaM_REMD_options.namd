@@ -1,0 +1,40 @@
+# shared simulation options for replica exchange
+
+timestep	1.0
+
+structure	CaM.psf
+coordinates	CaM.pdb
+
+margin		10.0
+stepspercycle	100
+paraTypeCharmm	   on
+parameters par_all36_prot.prm 
+parameters par_all36_carb.prm 
+parameters par_all36_lipid.prm
+parameters par_all36_na.prm
+parameters par_all36_cgenff.prm 
+parameters toppar_water_ions_namd.str 
+#binaryoutput       yes
+
+exclude scaled1-4
+1-4scaling 1.0
+switching on
+switchdist 15.0
+cutoff 16.0
+pairlistdist 18.0
+#GBIS parameters
+GBIS on
+ionConcentration 0.3
+alphaCutoff 14
+solventDielectric 80
+#hydrophobic Energy
+sasa on
+surfaceTension 0.006
+# Integrator parameters
+nonbondedFreq 2
+fullElectFrequency 4
+
+
+langevin on
+langevinDamping 5.0
+
