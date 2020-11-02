@@ -1,0 +1,1379 @@
+---
+output:
+  html_document: default
+  word_document: default
+---
+
+
+```{r loadClusterData,echo=FALSE,eval=FALSE}
+library(cluster)
+clusterData = vector(mode="list")
+data = scan('RMSD/D130G.clustRMSD.dat')
+clusterData[["D130G"]][["rmsd"]] = matrix(data,nrow=sqrt(length(data)),ncol=sqrt(length(data)))
+clusterData[["D130G"]][["cluster"]] = agnes(clusterData[["D130G"]][["rmsd"]], diss=T)
+
+data = scan('RMSD/D96V.clustRMSD.dat')
+clusterData[["D96V"]][["rmsd"]] = matrix(data,nrow=sqrt(length(data)),ncol=sqrt(length(data)))
+clusterData[["D96V"]][["cluster"]] = agnes(clusterData[["D96V"]][["rmsd"]], diss=T)
+
+data = scan('RMSD/N54I.clustRMSD.dat')
+clusterData[["N54I"]][["rmsd"]] = matrix(data,nrow=sqrt(length(data)),ncol=sqrt(length(data)))
+clusterData[["N54I"]][["cluster"]] = agnes(clusterData[["N54I"]][["rmsd"]], diss=T)
+
+data = scan('RMSD/N98S.clustRMSD.dat')
+clusterData[["N98S"]][["rmsd"]] = matrix(data,nrow=sqrt(length(data)),ncol=sqrt(length(data)))
+clusterData[["N98S"]][["cluster"]] = agnes(clusterData[["N98S"]][["rmsd"]], diss=T)
+
+data = scan('RMSD/F142L.clustRMSD.dat')
+clusterData[["F142L"]][["rmsd"]] = matrix(data,nrow=sqrt(length(data)),ncol=sqrt(length(data)))
+clusterData[["F142L"]][["cluster"]] = agnes(clusterData[["F142L"]][["rmsd"]], diss=T)
+
+data = scan('RMSD/wildtype.clustRMSD.dat')
+clusterData[["wildtype"]][["rmsd"]] = matrix(data,nrow=sqrt(length(data)),ncol=sqrt(length(data)))
+clusterData[["wildtype"]][["cluster"]] = agnes(clusterData[["wildtype"]][["rmsd"]], diss=T)
+
+save(clusterData,file="summaryClusterData.RData")
+
+```
+
+
+```{r findClusters,echo=FALSE,eval=FALSE}
+load("summaryClusterData.RData")
+trueCluster = .1
+
+for(mut in names(clusterData)){
+  rmsdData = clusterData[[mut]][["rmsd"]]
+  rownames(rmsdData) <- c(1:sqrt(length(rmsdData)))
+  colnames(rmsdData) <- c(1:sqrt(length(rmsdData)))
+  for (i in 1:500){
+    levels = cutree(clusterData[[mut]][["cluster"]], k=i)
+    names(levels) = c(1:length(levels))
+    clusterPopulation = summary(factor(levels))
+    clusterPopulation = clusterPopulation[clusterPopulation >= trueCluster*length(levels)]
+  
+    if(sum(clusterPopulation) > 0.5*length(levels)){
+      rmsdThresh = max(rmsdData)
+      for(curClust in names(clusterPopulation)){
+        structureID <- names(levels[levels == curClust])
+        clustRMSD <- rmsdData[structureID,structureID]
+        #print(max(clustRMSD))
+        if(max(clustRMSD) < rmsdThresh){
+          rmsdThresh = max(clustRMSD)
+        }
+      }
+      barplot(clusterPopulation,
+              main = paste(mut,i,"total clusters,",
+                           sum(clusterPopulation),"structures,",
+                           rmsdThresh,"max RMSD",sep=" "))
+    }
+  }
+}
+```
+
+```{r assignClusters, echo=FALSE,eval=FALSE}
+library(cluster)
+
+
+load("summaryClusterData.RData")
+
+levels.D130G = cutree(clusterData[["D130G"]][["cluster"]], k=12)
+summary(factor(levels.D130G))
+
+levels.D96V = cutree(clusterData[["D96V"]][["cluster"]], k=27)
+summary(factor(levels.D96V))
+
+levels.N54I = cutree(clusterData[["N54I"]][["cluster"]], k=41)
+summary(factor(levels.N54I))
+
+levels.N98S = cutree(clusterData[["N98S"]][["cluster"]], k=42)
+summary(factor(levels.N98S))
+
+levels.F142L = cutree(clusterData[["F142L"]][["cluster"]], k=39)
+summary(factor(levels.F142L))
+
+levels.wildtype = cutree(clusterData[["wildtype"]][["cluster"]], k=56)
+summary(factor(levels.wildtype))
+
+save(levels.D130G,levels.D96V,levels.N98S,levels.N54I,levels.F142L,levels.wildtype, file="camClusterAssignment.RData")
+
+```
+
+```{r formatCAMdata, echo=FALSE,eval=FALSE}
+structFeatures = read.table("CAMclustStructFeatures_dihedral.txt",header=TRUE,sep="\t")
+
+structFeatures$linkerDist <- sqrt((structFeatures$NlobeLinker.x - structFeatures$ClobeLinker.x)^2+(structFeatures$NlobeLinker.y - structFeatures$ClobeLinker.y)^2+(structFeatures$NlobeLinker.z - structFeatures$ClobeLinker.z)^2)
+structFeatures$IQ_COM.x <- (structFeatures$IQ1.x + structFeatures$IQ2.x)/2
+structFeatures$IQ_COM.y <- (structFeatures$IQ1.y + structFeatures$IQ2.y)/2
+structFeatures$IQ_COM.z <- (structFeatures$IQ1.z + structFeatures$IQ2.z)/2
+structFeatures$Nlobe_IQ_dist <- sqrt((structFeatures$IQ_COM.x - structFeatures$NlobeCOM.x)^2 + (structFeatures$IQ_COM.y - structFeatures$NlobeCOM.y)^2 + (structFeatures$IQ_COM.z - structFeatures$NlobeCOM.z)^2)
+structFeatures$Clobe_IQ_dist <- sqrt((structFeatures$IQ_COM.x - structFeatures$ClobeCOM.x)^2 + (structFeatures$IQ_COM.y - structFeatures$ClobeCOM.y)^2 + (structFeatures$IQ_COM.z - structFeatures$ClobeCOM.z)^2)
+
+
+
+features.D130G <- subset(structFeatures,Variant == "D130G")[,c(1,3,46,47,51,52)]
+features.D96V <- subset(structFeatures,Variant == "D96V")[,c(1,3,46,47,51,52)]
+features.N54I <- subset(structFeatures,Variant == "N54I")[,c(1,3,46,47,51,52)]
+features.N98S <- subset(structFeatures,Variant == "N98S")[,c(1,3,46,47,51,52)]
+features.F142L <- subset(structFeatures,Variant == "F142L")[,c(1,3,46,47,51,52)]
+features.wildtype <- subset(structFeatures,Variant == "wildtype")[,c(1,3,46,47,51,52)]
+
+load("camClusterAssignment.RData")
+features.D130G$Cluster = levels.D130G
+features.D96V$Cluster = levels.D96V
+features.N54I$Cluster = levels.N54I
+features.N98S$Cluster = levels.N98S
+features.F142L$Cluster = levels.F142L
+features.wildtype$Cluster = levels.wildtype
+
+energy.D130G <- read.table("energyData/D130G.1.energy",header=TRUE)[,3:5]
+energy.D130G <- rbind(energy.D130G,read.table("energyData/D130G.2.energy",header=TRUE)[,3:5])
+energy.D130G <- rbind(energy.D130G,read.table("energyData/D130G.3.energy",header=TRUE)[,3:5])
+features.D130G <- cbind(features.D130G,energy.D130G)
+
+energy.D96V <- read.table("energyData/D96V.1.energy",header=TRUE)[,3:5]
+energy.D96V <- rbind(energy.D96V,read.table("energyData/D96V.2.energy",header=TRUE)[,3:5])
+energy.D96V <- rbind(energy.D96V,read.table("energyData/D96V.3.energy",header=TRUE)[,3:5])
+features.D96V <- cbind(features.D96V,energy.D96V)
+
+energy.N98S <- read.table("energyData/N98S.comb.energy",header=TRUE)[,3:5]
+features.N98S <- cbind(features.N98S,energy.N98S)
+
+energy.N54I <- read.table("energyData/N54I.1.energy",header=TRUE)[,3:5]
+energy.N54I <- rbind(energy.N54I,read.table("energyData/N54I.1.restart.energy",header=TRUE)[,3:5])
+energy.N54I <- rbind(energy.N54I,read.table("energyData/N54I.2.energy",header=TRUE)[,3:5])
+energy.N54I <- rbind(energy.N54I,read.table("energyData/N54I.2.restart.energy",header=TRUE)[,3:5])
+energy.N54I <- rbind(energy.N54I,read.table("energyData/N54I.3.energy",header=TRUE)[,3:5])
+energy.N54I <- rbind(energy.N54I,read.table("energyData/N54I.3.restart.energy",header=TRUE)[,3:5])
+features.N54I <- cbind(features.N54I,energy.N54I)
+
+energy.F142L <- read.table("energyData/F142L.1.energy",header=TRUE)[,3:5]
+energy.F142L <- rbind(energy.F142L,read.table("energyData/F142L.2.energy",header=TRUE)[,3:5])
+energy.F142L <- rbind(energy.F142L,read.table("energyData/F142L.3.energy",header=TRUE)[,3:5])
+features.F142L <- cbind(features.F142L,energy.F142L)
+
+energy.wildtype <- read.table("energyData/wildtype.1.energy",header=TRUE)[,3:5]
+energy.wildtype <- rbind(energy.wildtype,read.table("energyData/wildtype.2.energy",header=TRUE)[,3:5])
+energy.wildtype <- rbind(energy.wildtype,read.table("energyData/wildtype.3.energy",header=TRUE)[,3:5])
+features.wildtype <- cbind(features.wildtype,energy.wildtype)
+
+camFeatures <- rbind(features.D130G,features.D96V,features.N98S,features.F142L,features.N54I,features.wildtype)
+
+save(camFeatures,file="camFeatures.RData")
+
+clustThresh = 0.1
+
+features.D130G.clust <- features.D130G
+for (i in 1:length(summary(factor(levels.D130G)))){
+  if ((unname(summary(factor(levels.D130G))[i])/3000) <= clustThresh){
+    features.D130G.clust <- subset(features.D130G.clust,Cluster != i)
+  } 
+}
+
+
+features.D96V.clust <- features.D96V
+for (i in 1:length(summary(factor(levels.D96V)))){
+  if ((unname(summary(factor(levels.D96V))[i])/3000) <= clustThresh){
+    features.D96V.clust <- subset(features.D96V.clust,Cluster != i)
+  } 
+}
+
+features.N54I.clust <- features.N54I
+for (i in 1:length(summary(factor(levels.N54I)))){
+  if ((unname(summary(factor(levels.N54I))[i])/3000) <= clustThresh){
+    features.N54I.clust <- subset(features.N54I.clust,Cluster != i)
+  } 
+}
+
+features.N98S.clust <- features.N98S
+for (i in 1:length(summary(factor(levels.N98S)))){
+  if ((unname(summary(factor(levels.N98S))[i])/3000) <= clustThresh){
+    features.N98S.clust <- subset(features.N98S.clust,Cluster != i)
+  } 
+}
+
+features.F142L.clust <- features.F142L
+for (i in 1:length(summary(factor(levels.F142L)))){
+  if ((unname(summary(factor(levels.F142L))[i])/3000) <= clustThresh){
+    features.F142L.clust <- subset(features.F142L.clust,Cluster != i)
+  } 
+}
+
+features.wildtype.clust <- features.wildtype
+for (i in 1:length(summary(factor(levels.wildtype)))){
+  if ((unname(summary(factor(levels.wildtype))[i])/3000) <= clustThresh){
+    features.wildtype.clust <- subset(features.wildtype.clust,Cluster != i)
+  } 
+}
+
+camFeatures.clust <- rbind(features.D130G.clust,features.D96V.clust,features.N98S.clust,features.F142L.clust,features.N54I.clust,features.wildtype.clust)
+
+save(camFeatures.clust,file="camFeatures.clust.RData")
+
+
+```
+
+```{r clusterStats,echo=FALSE,eval=FALSE}
+library(reshape2)
+library(ggplot2)
+source("summarySE.R")
+#load("camFeatures.RData")
+load("camFeatures.clust.RData")
+
+for (mut in c("wildtype","D130G","D96V","N54I","F142L","N98S")){
+  #camVar <- subset(camFeatures,Variant == "D130G")
+  camVar <- subset(camFeatures.clust,Variant == mut)
+  camVar$Variant <- paste(camVar$Variant,"-",camVar$Cluster,sep ="") 
+  print(paste(mut,"Cluster Summary",sep=" "))
+  clust.percent <- paste(round(100*summary(factor(camVar$Cluster))/3000,digits = 2),"%")
+  names(clust.percent) <- names(summary(factor(camVar$Cluster)))
+  print(clust.percent)
+
+  camVar <- camVar[,-c(2,7)]
+  camVar.eng <- camVar[,c(1,6,7,8)]
+  camVar.eng <- melt(camVar.eng)
+  names(camVar.eng) <- c("Cluster","Feature","value")
+  camVar.sum <- summarySE(camVar.eng,measurevar = "value", groupvars = c("Cluster","Feature"))
+  print(ggplot(camVar.sum, aes(x=Cluster, y=value, fill=Feature)) + 
+    geom_bar(position=position_dodge(), stat="identity") +
+  #  coord_cartesian(ylim=c(-1150,-650)) +
+    labs(title=paste("Energy Features of",mut," Structural Clusters",sep=" "),x="Cluster",y="(kcal/mol)")+
+    theme(legend.position="top",axis.text.x = element_text(angle = 45, hjust = 1)) + 
+  
+    geom_errorbar(aes(ymin=value-ci, ymax=value+ci),
+                      width=.2,                    # Width of the error bars
+                      position=position_dodge(.9))
+  )  
+  camVar.str <- camVar[,c(1:5)]
+  camVar.str <- melt(camVar.str)
+  names(camVar.str) <- c("Cluster","Feature","value")
+  camVar.sum <- summarySE(camVar.str,measurevar = "value", groupvars = c("Cluster","Feature"))
+  print(ggplot(camVar.sum, aes(x=Cluster, y=value, fill=Feature)) + 
+    geom_bar(position=position_dodge(), stat="identity") +
+  #  coord_cartesian(ylim=c(-1150,-650)) +
+    labs(title=paste("Structural Features of",mut," Structural Clusters",sep=" "),x="Cluster",y="Deg (dihedral) Angstrom (others)")+
+    theme(legend.position="top",axis.text.x = element_text(angle = 45, hjust = 1)) + 
+  
+    geom_errorbar(aes(ymin=value-ci, ymax=value+ci),
+                      width=.2,                    # Width of the error bars
+                      position=position_dodge(.9))
+  )
+}
+
+
+```
+
+```{r clusterStats2,echo=FALSE,eval=TRUE}
+library(reshape2)
+library(ggplot2)
+source("summarySE.R")
+#load("camFeatures.RData")
+load("camFeatures.clust.RData")
+
+myCol <- c("blue", "red","hotpink","green","darkgrey","cyan")
+names(myCol) <- c("D96V","D130G","F142L","N54I","wildtype","N98S")
+
+  camVar <- camFeatures.clust
+  camVar$Variant <- paste(camVar$Variant,"-",camVar$Cluster,sep ="") 
+  #print(paste(mut,"Cluster Summary",sep=" "))
+  clust.percent <- paste(round(100*summary(factor(camVar$Variant))/3000,digits = 2),"%")
+  names(clust.percent) <- names(summary(factor(camVar$Variant)))
+  print(clust.percent)
+
+  camVar <- camVar[,-c(2,7)]
+  camVar.eng <- camVar[,c(1,6,7,8)]
+  camVar.eng <- melt(camVar.eng)
+  names(camVar.eng) <- c("Cluster","Feature","value")
+  camVar.sum <- summarySE(camVar.eng,measurevar = "value", groupvars = c("Cluster","Feature"))
+   camVar.sum$Variant <- substr(camVar.sum$Cluster,1,regexpr("-",camVar.sum$Cluster)-1)
+  save(camVar.sum,file = "clusterStatsSummary.Eng.RData") 
+  print(ggplot(camVar.sum, aes(x=Cluster, y=value, fill=Feature,color=Variant)) + 
+    geom_bar(position=position_dodge(), stat="identity") +
+  #  coord_cartesian(ylim=c(-1150,-650)) +
+    labs(title=paste("Energy Features of Variant Clusters",sep=" "),x="Cluster",y="(kcal/mol)")+
+    theme(legend.position="top",axis.text.x = element_text(angle = 45, hjust = 1)) + 
+  scale_fill_grey() +
+    scale_color_manual(name="Variant",values=myCol) +
+    geom_errorbar(aes(ymin=value-ci, ymax=value+ci),
+                      width=.2,                    # Width of the error bars
+                      position=position_dodge(.9))
+  )  
+  camVar.str <- camVar[,c(1:5)]
+  camVar.str <- melt(camVar.str)
+  names(camVar.str) <- c("Cluster","Feature","value")
+  camVar.sum <- summarySE(camVar.str,measurevar = "value", groupvars = c("Cluster","Feature"))
+  camVar.sum$Variant <- substr(camVar.sum$Cluster,1,regexpr("-",camVar.sum$Cluster)-1)
+  print(ggplot(camVar.sum, aes(x=Cluster, y=value, fill=Feature,color=Variant)) + 
+          #facet_grid(. ~ Cluster) +
+    geom_bar(position=position_dodge(), stat="identity") +
+  #  coord_cartesian(ylim=c(-1150,-650)) +
+    labs(title=paste("Structural Features of Variant Structural Clusters",sep=" "),x="Cluster",y="Deg (dihedral) or Angstrom (others)")+
+    theme(legend.position="top",axis.text.x = element_text(angle = 45, hjust = 1)) + 
+  scale_fill_grey() +
+    scale_color_manual(name="Variant",values=myCol) +
+    geom_errorbar(aes(ymin=value-ci, ymax=value+ci),
+                      width=.2,                    # Width of the error bars
+                      position=position_dodge(.9))
+  )
+
+save(camVar.sum,file="clusterStatsSummary.str.RData")
+
+```
+
+
+```{r plotCAMfeatures_allPCA,echo=FALSE,eval=TRUE}
+load("camFeatures.clust.RData")
+library(ggplot2)
+
+wt <- subset(camFeatures.clust,Variant=="wildtype")
+
+myCol <- c("blue", "red","hotpink","green","darkgrey","cyan")
+names(myCol) <- c("D96V","D130G","F142L","N54I","wildtype","N98S")
+
+ggplot(camFeatures.clust,aes(y=linkerDist,x=Dihedral,
+  group=Variant,color=Variant,fill=Variant))+
+  geom_point(shape=".") +
+  stat_ellipse() +
+  stat_ellipse(data=wt,size=1) +
+  theme_classic() +
+  coord_cartesian(ylim=c(21,27),xlim=c(0,60)) +
+  scale_color_manual(name="Variant",values=myCol) +
+  ggtitle("Calmodulin Conformational Shifts in Mutant Structures")+
+  labs(x="Dihedral (deg)",y="Linker Distance (\305)")
+
+
+#library(ggbiplot)
+
+plotPCA <- function (pcobj, choices = 1:2, scale = 1, pc.biplot = TRUE, 
+  obs.scale = 1 - scale, var.scale = scale, groups = NULL, 
+  ellipse = FALSE, ellipse.prob = 0.68, labels = NULL, labels.size = 3, 
+  alpha = 1, var.axes = TRUE, circle = FALSE, circle.prob = 0.69, 
+  varname.size = 3, varname.adjust = 1.5, varname.abbrev = FALSE, 
+  ...) 
+{
+  library(ggplot2)
+  library(plyr)
+  library(scales)
+  library(grid)
+  stopifnot(length(choices) == 2)
+  if (inherits(pcobj, "prcomp")) {
+    nobs.factor <- sqrt(nrow(pcobj$x) - 1)
+    d <- pcobj$sdev
+    u <- sweep(pcobj$x, 2, 1/(d * nobs.factor), FUN = "*")
+    v <- pcobj$rotation
+  }
+  else if (inherits(pcobj, "princomp")) {
+    nobs.factor <- sqrt(pcobj$n.obs)
+    d <- pcobj$sdev
+    u <- sweep(pcobj$scores, 2, 1/(d * nobs.factor), FUN = "*")
+    v <- pcobj$loadings
+  }
+  else if (inherits(pcobj, "PCA")) {
+    nobs.factor <- sqrt(nrow(pcobj$call$X))
+    d <- unlist(sqrt(pcobj$eig)[1])
+    u <- sweep(pcobj$ind$coord, 2, 1/(d * nobs.factor), 
+      FUN = "*")
+    v <- sweep(pcobj$var$coord, 2, sqrt(pcobj$eig[1:ncol(pcobj$var$coord), 
+      1]), FUN = "/")
+  }
+  else if (inherits(pcobj, "lda")) {
+    nobs.factor <- sqrt(pcobj$N)
+    d <- pcobj$svd
+    u <- predict(pcobj)$x/nobs.factor
+    v <- pcobj$scaling
+    d.total <- sum(d^2)
+  }
+  else {
+    stop("Expected a object of class prcomp, princomp, PCA, or lda")
+  }
+  choices <- pmin(choices, ncol(u))
+  df.u <- as.data.frame(sweep(u[, choices], 2, d[choices]^obs.scale, 
+    FUN = "*"))
+  v <- sweep(v, 2, d^var.scale, FUN = "*")
+  df.v <- as.data.frame(v[, choices])
+  names(df.u) <- c("xvar", "yvar")
+  names(df.v) <- names(df.u)
+  if (pc.biplot) {
+    df.u <- df.u * nobs.factor
+  }
+  r <- sqrt(qchisq(circle.prob, df = 2)) * prod(colMeans(df.u^2))^(1/4)
+  v.scale <- rowSums(v^2)
+  df.v <- r * df.v/sqrt(max(v.scale))
+  if (obs.scale == 0) {
+    u.axis.labs <- paste("standardized PC", choices, sep = "")
+  }
+  else {
+    u.axis.labs <- paste("PC", choices, sep = "")
+  }
+  u.axis.labs <- paste(u.axis.labs, sprintf("(%0.1f%% explained var.)", 
+    100 * pcobj$sdev[choices]^2/sum(pcobj$sdev^2)))
+  if (!is.null(labels)) {
+    df.u$labels <- labels
+  }
+  if (!is.null(groups)) {
+    df.u$groups <- groups
+  }
+  if (varname.abbrev) {
+    df.v$varname <- abbreviate(rownames(v))
+  }
+  else {
+    df.v$varname <- rownames(v)
+  }
+  df.v$angle <- with(df.v, (180/pi) * atan(yvar/xvar))
+  df.v$hjust = with(df.v, (1 - varname.adjust * sign(xvar))/2)
+  g <- ggplot(data = df.u, aes(x = xvar, y = yvar)) + xlab(u.axis.labs[1]) + 
+    ylab(u.axis.labs[2]) + coord_equal()
+  if (var.axes) {
+    if (circle) {
+      theta <- c(seq(-pi, pi, length = 50), seq(pi, -pi, 
+        length = 50))
+      circle <- data.frame(xvar = r * cos(theta), yvar = r * 
+        sin(theta))
+      g <- g + geom_path(data = circle, color = muted("white"), 
+        size = 1/2, alpha = 1/3)
+    }
+#    g <- g + geom_segment(data = df.v, aes(x = 0, y = 0, 
+#      xend = xvar, yend = yvar), arrow = arrow(length = unit(1/2, 
+#      "picas")), color = muted("red"))
+  }
+  if (!is.null(df.u$labels)) {
+    if (!is.null(df.u$groups)) {
+      g <- g + geom_text(aes(label = labels, color = groups), 
+        size = labels.size)
+    }
+    else {
+      g <- g + geom_text(aes(label = labels), size = labels.size)
+    }
+  }
+  else {
+    if (!is.null(df.u$groups)) {
+      g <- g + geom_point(aes(color = groups), alpha = alpha, size = 0.1)
+    }
+    else {
+      g <- g + geom_point(alpha = alpha, size = 0.1)
+    }
+  }
+  if (!is.null(df.u$groups) && ellipse) {
+    theta <- c(seq(-pi, pi, length = 50), seq(pi, -pi, length = 50))
+    circle <- cbind(cos(theta), sin(theta))
+    ell <- ddply(df.u, "groups", function(x) {
+      if (nrow(x) <= 2) {
+        return(NULL)
+      }
+      sigma <- var(cbind(x$xvar, x$yvar))
+     # print(sigma)
+      mu <- c(mean(x$xvar), mean(x$yvar))
+      print(x$group[1])
+      print(mu)
+      ed <- sqrt(qchisq(ellipse.prob, df = 2))
+      #print(ed)
+      data.frame(sweep(circle %*% chol(sigma) * ed, 2, 
+        mu, FUN = "+"), groups = x$groups[1])
+    })
+    names(ell)[1:2] <- c("xvar", "yvar")
+    g <- g + geom_path(data = ell, aes(color = groups, group = groups),size=1.5)
+  }
+  if (var.axes) {
+      g <- g + geom_segment(data = df.v, aes(x = 0, y = 0, 
+      xend = xvar, yend = yvar), arrow = arrow(length = unit(1/2, 
+      "picas")), color = muted("black"),size = 1.5)
+      g <- g + geom_text(data = df.v, aes(label = varname, 
+      x = xvar, y = yvar, angle = angle, hjust = hjust), 
+      color = "darkred", size = varname.size)
+  }
+  return(g)
+}
+
+
+myCol <- c("blue","blue","blue","blue", "red","red","red","red","hotpink","hotpink","hotpink","hotpink","green","green","green","green","cyan","cyan","cyan","cyan","darkgrey","darkgrey","darkgrey")
+names(myCol) <- c("D130G-2","D130G-3","D130G-4","D130G-9","D96V-15","D96V-16","D96V-4","D96V-5","F142L-18","F142L-3",
+                  "F142L-4","F142L-6","N54I-12","N54I-18","N54I-24","N54I-37","N98S-16","N98S-27","N98S-33","N98S-39","wildtype-4","wildtype-6","wildtype-7")
+
+camFeatures.pca <- camFeatures.clust
+structClass <- paste(camFeatures.pca$Variant,"-",camFeatures.pca$Cluster,sep="")
+camFeatures.pca <- camFeatures.pca[,-c(1,2,7)]
+
+md.pca <- prcomp(camFeatures.pca,scale=TRUE)
+plotPCA(md.pca, obs.scale = 1, var.scale = 1,
+  groups = structClass, ellipse = TRUE, circle = FALSE, varname.size=3) +
+  scale_color_discrete(name = 'Variant') +
+  theme(legend.direction = 'vertical', legend.position = 'bottom') +
+  theme_classic()+
+    scale_color_manual(name="Variant",values=myCol) +
+  ggtitle("PCA of Variant Cluster Features in CaM MD Trajectories") 
+
+
+
+    
+
+```
+
+
+```{r plotCAMfeatures,echo=FALSE,eval=FALSE}
+load("camFeatures.clust.RData")
+library(ggplot2)
+
+wt <- subset(camFeatures.clust,Variant=="wildtype")
+
+myCol <- c("blue", "red","hotpink","green","darkgrey","cyan")
+names(myCol) <- c("D96V","D130G","F142L","N54I","wildtype","N98S")
+
+ggplot(camFeatures.clust,aes(y=linkerDist,x=Dihedral,
+  group=Variant,color=Variant,fill=Variant))+
+  geom_point(shape=".") +
+  stat_ellipse() +
+  stat_ellipse(data=wt,size=1) +
+  theme_classic() +
+  coord_cartesian(ylim=c(21,27),xlim=c(0,60)) +
+  scale_color_manual(name="Variant",values=myCol) +
+  ggtitle("Calmodulin Conformational Shifts in Mutant Structures")+
+  labs(x="Dihedral (deg)",y="Linker Distance (\305)")
+
+
+#library(ggbiplot)
+
+plotPCA <- function (pcobj, choices = 1:2, scale = 1, pc.biplot = TRUE, 
+  obs.scale = 1 - scale, var.scale = scale, groups = NULL, 
+  ellipse = FALSE, ellipse.prob = 0.68, labels = NULL, labels.size = 3, 
+  alpha = 1, var.axes = TRUE, circle = FALSE, circle.prob = 0.69, 
+  varname.size = 3, varname.adjust = 1.5, varname.abbrev = FALSE, 
+  ...) 
+{
+  library(ggplot2)
+  library(plyr)
+  library(scales)
+  library(grid)
+  stopifnot(length(choices) == 2)
+  if (inherits(pcobj, "prcomp")) {
+    nobs.factor <- sqrt(nrow(pcobj$x) - 1)
+    d <- pcobj$sdev
+    u <- sweep(pcobj$x, 2, 1/(d * nobs.factor), FUN = "*")
+    v <- pcobj$rotation
+  }
+  else if (inherits(pcobj, "princomp")) {
+    nobs.factor <- sqrt(pcobj$n.obs)
+    d <- pcobj$sdev
+    u <- sweep(pcobj$scores, 2, 1/(d * nobs.factor), FUN = "*")
+    v <- pcobj$loadings
+  }
+  else if (inherits(pcobj, "PCA")) {
+    nobs.factor <- sqrt(nrow(pcobj$call$X))
+    d <- unlist(sqrt(pcobj$eig)[1])
+    u <- sweep(pcobj$ind$coord, 2, 1/(d * nobs.factor), 
+      FUN = "*")
+    v <- sweep(pcobj$var$coord, 2, sqrt(pcobj$eig[1:ncol(pcobj$var$coord), 
+      1]), FUN = "/")
+  }
+  else if (inherits(pcobj, "lda")) {
+    nobs.factor <- sqrt(pcobj$N)
+    d <- pcobj$svd
+    u <- predict(pcobj)$x/nobs.factor
+    v <- pcobj$scaling
+    d.total <- sum(d^2)
+  }
+  else {
+    stop("Expected a object of class prcomp, princomp, PCA, or lda")
+  }
+  choices <- pmin(choices, ncol(u))
+  df.u <- as.data.frame(sweep(u[, choices], 2, d[choices]^obs.scale, 
+    FUN = "*"))
+  v <- sweep(v, 2, d^var.scale, FUN = "*")
+  df.v <- as.data.frame(v[, choices])
+  names(df.u) <- c("xvar", "yvar")
+  names(df.v) <- names(df.u)
+  if (pc.biplot) {
+    df.u <- df.u * nobs.factor
+  }
+  r <- sqrt(qchisq(circle.prob, df = 2)) * prod(colMeans(df.u^2))^(1/4)
+  v.scale <- rowSums(v^2)
+  df.v <- r * df.v/sqrt(max(v.scale))
+  if (obs.scale == 0) {
+    u.axis.labs <- paste("standardized PC", choices, sep = "")
+  }
+  else {
+    u.axis.labs <- paste("PC", choices, sep = "")
+  }
+  u.axis.labs <- paste(u.axis.labs, sprintf("(%0.1f%% explained var.)", 
+    100 * pcobj$sdev[choices]^2/sum(pcobj$sdev^2)))
+  if (!is.null(labels)) {
+    df.u$labels <- labels
+  }
+  if (!is.null(groups)) {
+    df.u$groups <- groups
+  }
+  if (varname.abbrev) {
+    df.v$varname <- abbreviate(rownames(v))
+  }
+  else {
+    df.v$varname <- rownames(v)
+  }
+  df.v$angle <- with(df.v, (180/pi) * atan(yvar/xvar))
+  df.v$hjust = with(df.v, (1 - varname.adjust * sign(xvar))/2)
+  g <- ggplot(data = df.u, aes(x = xvar, y = yvar)) + xlab(u.axis.labs[1]) + 
+    ylab(u.axis.labs[2]) + coord_equal()
+  if (var.axes) {
+    if (circle) {
+      theta <- c(seq(-pi, pi, length = 50), seq(pi, -pi, 
+        length = 50))
+      circle <- data.frame(xvar = r * cos(theta), yvar = r * 
+        sin(theta))
+      g <- g + geom_path(data = circle, color = muted("white"), 
+        size = 1/2, alpha = 1/3)
+    }
+#    g <- g + geom_segment(data = df.v, aes(x = 0, y = 0, 
+#      xend = xvar, yend = yvar), arrow = arrow(length = unit(1/2, 
+#      "picas")), color = muted("red"))
+  }
+  if (!is.null(df.u$labels)) {
+    if (!is.null(df.u$groups)) {
+      g <- g + geom_text(aes(label = labels, color = groups), 
+        size = labels.size)
+    }
+    else {
+      g <- g + geom_text(aes(label = labels), size = labels.size)
+    }
+  }
+  else {
+    if (!is.null(df.u$groups)) {
+      g <- g + geom_point(aes(color = groups), alpha = alpha, size = 0.1)
+    }
+    else {
+      g <- g + geom_point(alpha = alpha, size = 0.1)
+    }
+  }
+  if (!is.null(df.u$groups) && ellipse) {
+    theta <- c(seq(-pi, pi, length = 50), seq(pi, -pi, length = 50))
+    circle <- cbind(cos(theta), sin(theta))
+    ell <- ddply(df.u, "groups", function(x) {
+      if (nrow(x) <= 2) {
+        return(NULL)
+      }
+      sigma <- var(cbind(x$xvar, x$yvar))
+     # print(sigma)
+      mu <- c(mean(x$xvar), mean(x$yvar))
+      print(x$group[1])
+      print(mu)
+      ed <- sqrt(qchisq(ellipse.prob, df = 2))
+      #print(ed)
+      data.frame(sweep(circle %*% chol(sigma) * ed, 2, 
+        mu, FUN = "+"), groups = x$groups[1])
+    })
+    names(ell)[1:2] <- c("xvar", "yvar")
+    g <- g + geom_path(data = ell, aes(color = groups, group = groups),size=1.5)
+  }
+  if (var.axes) {
+      g <- g + geom_segment(data = df.v, aes(x = 0, y = 0, 
+      xend = xvar, yend = yvar), arrow = arrow(length = unit(1/2, 
+      "picas")), color = muted("black"),size = 1.5)
+      g <- g + geom_text(data = df.v, aes(label = varname, 
+      x = xvar, y = yvar, angle = angle, hjust = hjust), 
+      color = "darkred", size = varname.size)
+  }
+  return(g)
+}
+
+
+
+
+camFeatures.pca <- subset(camFeatures.clust,Variant == "D130G" | Variant == "wildtype")
+structClass <- paste(camFeatures.pca$Variant,"-",camFeatures.pca$Cluster,sep="")
+camFeatures.pca <- camFeatures.pca[,-c(1,2,7)]
+
+md.pca <- prcomp(camFeatures.pca,scale=TRUE)
+plotPCA(md.pca, obs.scale = 1, var.scale = 1,
+  groups = structClass, ellipse = TRUE, circle = TRUE, varname.size=5) +
+  scale_color_discrete(name = '') +
+  theme(legend.direction = 'vertical', legend.position = 'bottom') +
+  theme_classic()+
+  ggtitle("PCA of Structural Features in CaM MD Trajectories") 
+
+
+camFeatures.pca <- subset(camFeatures.clust,Variant == "D96V" | Variant == "wildtype")
+structClass <- paste(camFeatures.pca$Variant,"-",camFeatures.pca$Cluster,sep="")
+camFeatures.pca <- camFeatures.pca[,-c(1,2,7)]
+
+md.pca <- prcomp(camFeatures.pca,scale=TRUE)
+plotPCA(md.pca, obs.scale = 1, var.scale = 1,
+  groups = structClass, ellipse = TRUE, circle = TRUE, varname.size=5) +
+  scale_color_discrete(name = '') +
+  theme(legend.direction = 'vertical', legend.position = 'bottom') +
+  theme_classic()+
+  ggtitle("PCA of Structural Features in CaM MD Trajectories") 
+
+camFeatures.pca <- subset(camFeatures.clust,Variant == "N98S" | Variant == "wildtype")
+structClass <- paste(camFeatures.pca$Variant,"-",camFeatures.pca$Cluster,sep="")
+camFeatures.pca <- camFeatures.pca[,-c(1,2,7)]
+
+md.pca <- prcomp(camFeatures.pca,scale=TRUE)
+plotPCA(md.pca, obs.scale = 1, var.scale = 1,
+  groups = structClass, ellipse = TRUE, circle = TRUE, varname.size=5) +
+  scale_color_discrete(name = '') +
+  theme(legend.direction = 'vertical', legend.position = 'bottom') +
+  theme_classic()+
+  ggtitle("PCA of Structural Features in CaM MD Trajectories") 
+
+camFeatures.pca <- subset(camFeatures.clust,Variant == "N54I" | Variant == "wildtype")
+structClass <- paste(camFeatures.pca$Variant,"-",camFeatures.pca$Cluster,sep="")
+camFeatures.pca <- camFeatures.pca[,-c(1,2,7)]
+
+md.pca <- prcomp(camFeatures.pca,scale=TRUE)
+plotPCA(md.pca, obs.scale = 1, var.scale = 1,
+  groups = structClass, ellipse = TRUE, circle = TRUE, varname.size=5) +
+  scale_color_discrete(name = '') +
+  theme(legend.direction = 'vertical', legend.position = 'bottom') +
+  theme_classic()+
+  ggtitle("PCA of Structural Features in CaM MD Trajectories") 
+
+camFeatures.pca <- subset(camFeatures.clust,Variant == "F142L" | Variant == "wildtype")
+structClass <- paste(camFeatures.pca$Variant,"-",camFeatures.pca$Cluster,sep="")
+camFeatures.pca <- camFeatures.pca[,-c(1,2,7)]
+
+md.pca <- prcomp(camFeatures.pca,scale=TRUE)
+plotPCA(md.pca, obs.scale = 1, var.scale = 1,
+  groups = structClass, ellipse = TRUE, circle = TRUE, varname.size=5) +
+  scale_color_discrete(name = '') +
+  theme(legend.direction = 'vertical', legend.position = 'bottom') +
+  theme_classic()+
+  ggtitle("PCA of Structural Features in CaM MD Trajectories") 
+
+camFeatures.pca <- subset(camFeatures.clust,Variant == "F142L" | Variant == "D130G" | Variant == "D96V" | Variant == "wildtype")
+structClass <- paste(camFeatures.pca$Variant,"-",camFeatures.pca$Cluster,sep="")
+camFeatures.pca <- camFeatures.pca[,-c(1,2,7)]
+
+md.pca <- prcomp(camFeatures.pca,scale=TRUE)
+plotPCA(md.pca, obs.scale = 1, var.scale = 1,
+  groups = structClass, ellipse = TRUE, circle = TRUE, varname.size=5) +
+  scale_color_discrete(name = '') +
+  theme(legend.direction = 'vertical', legend.position = 'bottom') +
+  theme_classic()+
+  ggtitle("PCA of Structural Features in CaM MD Trajectories") 
+
+camFeatures.pca <- subset(camFeatures.clust,Variant == "N54I" | Variant == "N98S" | Variant == "wildtype")
+structClass <- paste(camFeatures.pca$Variant,"-",camFeatures.pca$Cluster,sep="")
+camFeatures.pca <- camFeatures.pca[,-c(1,2,7)]
+
+md.pca <- prcomp(camFeatures.pca,scale=TRUE)
+plotPCA(md.pca, obs.scale = 1, var.scale = 1,
+  groups = structClass, ellipse = TRUE, circle = TRUE, varname.size=5) +
+  scale_color_discrete(name = '') +
+  theme(legend.direction = 'vertical', legend.position = 'bottom') +
+  theme_classic()+
+  ggtitle("PCA of Structural Features in CaM MD Trajectories") 
+
+
+camFeatures.pca <- camFeatures.clust
+structClass <- paste(camFeatures.pca$Variant,"-",camFeatures.pca$Cluster,sep="")
+camFeatures.pca <- camFeatures.pca[,-c(1,2,7)]
+
+md.pca <- prcomp(camFeatures.pca,scale=TRUE)
+plotPCA(md.pca, obs.scale = 1, var.scale = 1,
+  groups = structClass, ellipse = TRUE, circle = TRUE, varname.size=5) +
+  scale_color_discrete(name = '') +
+  theme(legend.direction = 'vertical', legend.position = 'bottom') +
+  theme_classic()+
+  ggtitle("PCA of Structural Features in CaM MD Trajectories") 
+
+
+mutTypes <- c("D130G","D96V","N54I","N142L","N98S","wildtype")
+
+#for (i in 1:(length(mutTypes)-1)){
+#  for (j in (i+1):length(mutTypes)){
+#    print(paste(mutTypes[i],mutTypes[j],sep="-"))
+#    camFeatures.pca <- subset(camFeatures.clust,Variant == mutTypes[i] | Variant == mutTypes[j])
+#    structClass <- paste(camFeatures.pca$Variant,"-",camFeatures.pca$Cluster,sep="")
+#    camFeatures.pca <- camFeatures.pca[,-c(1,2,7)]
+#    
+#    md.pca <- prcomp(camFeatures.pca,scale=TRUE)
+#    print(plotPCA(md.pca, obs.scale = 1, var.scale = 1,
+#      groups = structClass, ellipse = TRUE, circle = TRUE, varname.size=5) +
+#      scale_color_discrete(name = '') +
+#      theme(legend.direction = 'vertical', legend.position = 'bottom') +
+#      theme_classic()+
+#      ggtitle("PCA of Structural Features in CaM MD Trajectories") 
+#)
+#  
+#  }
+#  
+#}
+
+    
+
+```
+
+```{r analyzeOverlap,eval=TRUE,echo=FALSE}
+library(cluster)
+clusterRep.rmsd <- read.table("../paperDraft081418/pdbStruct/clusterRMSD.txt",sep=" ",row.names = 1)
+row.names(clusterRep.rmsd) <- gsub(".pdb","",row.names(clusterRep.rmsd))
+row.names(clusterRep.rmsd) <- gsub("[.]","-",row.names(clusterRep.rmsd))
+rmsdDist <- agnes(clusterRep.rmsd,diss=TRUE)
+plot(as.dendrogram(rmsdDist),main="RMSD Clusters of Representative Variant Structures")
+
+load("clusterStatsSummary.eng.RData")
+clustStatSum <- camVar.sum
+load("clusterStatsSummary.str.RData")
+clustStatSum <- rbind(clustStatSum,camVar.sum)
+
+clustStatSum.df <- data.frame("Cluster" = unique(clustStatSum$Cluster))
+for (feature in unique(clustStatSum$Feature)){
+  tempDF <- clustStatSum[clustStatSum$Feature == feature, c(1,4:7)]
+  names(tempDF)[2] <- paste(feature,"mean",sep="-")
+  names(tempDF)[3] <- paste(feature,"sd",sep="-")
+  names(tempDF)[4] <- paste(feature,"se",sep="-")
+  names(tempDF)[5] <- paste(feature,"ci",sep="-")
+  clustStatSum.df <- merge(clustStatSum.df,tempDF)
+}
+
+row.names(clustStatSum.df) <- clustStatSum.df$Cluster
+clustStatSum.df <- clustStatSum.df[,-1]
+
+library(stats)                          
+clustStat.dist <- dist(clustStatSum.df)
+clustStat.clust <- agnes(clustStat.dist)
+plot(as.dendrogram(clustStat.clust),main="Variant Clustering of Variant Population Features")
+
+```
+
+```{r analyzePCA_weighted,eval=TRUE,echo=FALSE}
+
+library(ggplot2)
+#got centroids from plotPCA algorithm
+centroids <- read.table("allPCAcentroids.tab",sep="\t")
+names(centroids) <- c("variant","cluster","x","y")
+centroids$phenotype = c(rep("LQTS",12),rep("CPVT",8),rep("WT",3))
+
+
+
+load("camFeatures.clust.RData")
+
+#remove clusters that overlap with wildtype
+centroids <- centroids[-c(2,4,5,7,8,15,9),]
+
+ggplot(centroids,aes(x=x,y=y,shape=variant,color=phenotype)) +
+  geom_point()
+
+totalStruct = 3000
+
+clusterWeights <- vector(mode="list")
+
+for (i in 1:length(centroids$variant)){
+  currVar <- as.character(centroids$variant[i])
+  currClust <- as.numeric(centroids$cluster[i])
+  currCamFeatures <- subset(camFeatures.clust,Variant == currVar & Cluster == currClust)
+  clusterWeights[[paste(currVar,currClust,sep="-")]] <- length(currCamFeatures$Structure)/totalStruct
+}
+
+varCentroid = data.frame(variant=character(),x=double(),y=double())
+for (i in unique(centroids$variant)){
+  centroid.var <- subset(centroids,variant == i)
+  currCentroid <- vector(mode="list")
+  for (j in unique(centroid.var$cluster)){
+    centroid.clust <- subset(centroid.var,cluster == j)
+    currCentroid[[as.character(j)]]$x <- centroid.clust$x
+    currCentroid[[as.character(j)]]$y <- centroid.clust$y
+  }
+  centroid.combined.x <- 0
+  centroid.combined.y <- 0
+  weightSum <- 0
+  for(k in names(currCentroid)){
+    currWeight <- clusterWeights[[paste(i,k,sep="-")]]
+    centroid.combined.x <- centroid.combined.x + currWeight*currCentroid[[k]]$x
+    centroid.combined.y <- centroid.combined.y + currWeight*currCentroid[[k]]$y
+    weightSum = weightSum + currWeight
+  }
+  varCentroid.x <- centroid.combined.x/weightSum
+  varCentroid.y <- centroid.combined.y/weightSum
+  newCentroid <- data.frame(variant=i,x=varCentroid.x,y=varCentroid.y)
+  varCentroid <- rbind(varCentroid,newCentroid)
+}
+
+
+myCol <- c("blue", "red","hotpink","green","darkgrey","cyan")
+names(myCol) <- c("D96V","D130G","F142L","N54I","wildtype","N98S")
+varCentroid$phenotype <- c("LQTS","LQTS","LQTS","CPVT","CPVT","Wildtype")
+ggplot(varCentroid,aes(x=x,y=y,shape=phenotype,color=variant)) +
+  geom_point(size=5) +
+
+  theme_classic()+
+    theme(legend.position = "bottom") +
+    scale_color_manual(name="variant",values=myCol) +
+  labs(title="Weighted PCA Centroids for CAM Variants",x="PC 1",y="PC 2")
+
+
+dist.D130G <- sqrt((varCentroid[varCentroid$variant == "wildtype",]$x - varCentroid[varCentroid$variant == "D130G",]$x)^2 + 
+                    (varCentroid[varCentroid$variant == "wildtype",]$y - varCentroid[varCentroid$variant == "D130G",]$y)^2 )
+dist.D96V <- sqrt((varCentroid[varCentroid$variant == "wildtype",]$x - varCentroid[varCentroid$variant == "D96V",]$x)^2 + 
+                    (varCentroid[varCentroid$variant == "wildtype",]$y - varCentroid[varCentroid$variant == "D96V",]$y)^2 )
+dist.F142L <- sqrt((varCentroid[varCentroid$variant == "wildtype",]$x - varCentroid[varCentroid$variant == "F142L",]$x)^2 + 
+                    (varCentroid[varCentroid$variant == "wildtype",]$y - varCentroid[varCentroid$variant == "F142L",]$y)^2 )
+dist.N54I <- sqrt((varCentroid[varCentroid$variant == "wildtype",]$x - varCentroid[varCentroid$variant == "N54I",]$x)^2 + 
+                    (varCentroid[varCentroid$variant == "wildtype",]$y - varCentroid[varCentroid$variant == "N54I",]$y)^2 )
+dist.N98S <- sqrt((varCentroid[varCentroid$variant == "wildtype",]$x - varCentroid[varCentroid$variant == "N98S",]$x)^2 + 
+                    (varCentroid[varCentroid$variant == "wildtype",]$y - varCentroid[varCentroid$variant == "N98S",]$y)^2 )
+
+print(c("D130G",dist.D130G))
+print(c("D96V",dist.D96V))
+print(c("F142L",dist.F142L))
+print(c("N54I",dist.N54I))
+print(c("N98S",dist.N98S))
+
+
+```
+
+```{r analyzePCA,eval=FALSE,echo=FALSE}
+library(ggplot2)
+#got centroids from plotPCA algorithm
+centroids <- read.table("allPCAcentroids.tab",sep="\t")
+names(centroids) <- c("variant","cluster","x","y")
+centroids$phenotype = c(rep("LQTS",12),rep("CPVT",8),rep("WT",3))
+
+load("camFeatures.clust.RData")
+
+
+
+#remove clusters that overlap with wildtype
+#centroids <- centroids[-c(1,2,8,9,15),]
+#centroids <- centroids[-c(2,7,5,9,8,4,15),]
+#centroids <- centroids[-c(2,7,5,15),]
+centroids <- centroids[-c(2,4,5,7,8,15,9),]
+
+ggplot(centroids,aes(x=x,y=y,shape=variant,color=phenotype)) +
+  geom_point()
+
+totalStruct = 3000
+
+clusterWeights <- vector(mode="list")
+
+for (i in 1:length(centroids$variant)){
+  currVar <- as.character(centroids$variant[i])
+  currClust <- as.numeric(centroids$cluster[i])
+  currCamFeatures <- subset(camFeatures.clust,Variant == currVar & Cluster == currClust)
+  clusterWeights[[paste(currVar,currClust,sep="-")]] <- length(currCamFeatures$Structure)/totalStruct
+}
+
+varCentroid = data.frame(variant=character(),x=double(),y=double())
+for (i in unique(centroids$variant)){
+  centroid.var <- subset(centroids,variant == i)
+  currCentroid <- vector(mode="list")
+  for (j in unique(centroid.var$cluster)){
+    centroid.clust <- subset(centroid.var,cluster == j)
+    currCentroid[[as.character(j)]]$x <- centroid.clust$x
+    currCentroid[[as.character(j)]]$y <- centroid.clust$y
+  }
+  centroid.combined.x <- 0
+  centroid.combined.y <- 0
+  weightSum <- 0
+  for(k in names(currCentroid)){
+    currWeight <- clusterWeights[[paste(i,k,sep="-")]]
+    centroid.combined.x <- centroid.combined.x + currWeight*currCentroid[[k]]$x
+    centroid.combined.y <- centroid.combined.y + currWeight*currCentroid[[k]]$y
+    weightSum = weightSum + currWeight
+  }
+  varCentroid.x <- centroid.combined.x/weightSum
+  varCentroid.y <- centroid.combined.y/weightSum
+  newCentroid <- data.frame(variant=i,x=varCentroid.x,y=varCentroid.y)
+  varCentroid <- rbind(varCentroid,newCentroid)
+}
+
+varCentroid$phenotype <- c("LQTS","LQTS","LQTS","CPVT","CPVT","Wildtype")
+ggplot(varCentroid,aes(x=x,y=y,shape=variant,color=phenotype)) +
+  geom_point() +
+  labs(title="weighted")
+
+
+dist.D130G <- sqrt((varCentroid[varCentroid$variant == "wildtype",]$x - varCentroid[varCentroid$variant == "D130G",]$x)^2 + 
+                    (varCentroid[varCentroid$variant == "wildtype",]$y - varCentroid[varCentroid$variant == "D130G",]$y)^2 )
+dist.D96V <- sqrt((varCentroid[varCentroid$variant == "wildtype",]$x - varCentroid[varCentroid$variant == "D96V",]$x)^2 + 
+                    (varCentroid[varCentroid$variant == "wildtype",]$y - varCentroid[varCentroid$variant == "D96V",]$y)^2 )
+dist.F142L <- sqrt((varCentroid[varCentroid$variant == "wildtype",]$x - varCentroid[varCentroid$variant == "F142L",]$x)^2 + 
+                    (varCentroid[varCentroid$variant == "wildtype",]$y - varCentroid[varCentroid$variant == "F142L",]$y)^2 )
+dist.N54I <- sqrt((varCentroid[varCentroid$variant == "wildtype",]$x - varCentroid[varCentroid$variant == "N54I",]$x)^2 + 
+                    (varCentroid[varCentroid$variant == "wildtype",]$y - varCentroid[varCentroid$variant == "N54I",]$y)^2 )
+dist.N98S <- sqrt((varCentroid[varCentroid$variant == "wildtype",]$x - varCentroid[varCentroid$variant == "N98S",]$x)^2 + 
+                    (varCentroid[varCentroid$variant == "wildtype",]$y - varCentroid[varCentroid$variant == "N98S",]$y)^2 )
+
+print(c("D130G",dist.D130G))
+print(c("D96V",dist.D96V))
+print(c("F142L",dist.F142L))
+print(c("N54I",dist.N54I))
+print(c("N98S",dist.N98S))
+
+#unweighted
+varCentroid = data.frame(variant=character(),x=double(),y=double())
+for (i in unique(centroids$variant)){
+  centroid.var <- subset(centroids,variant == i)
+  currCentroid <- vector(mode="list")
+  for (j in unique(centroid.var$cluster)){
+    centroid.clust <- subset(centroid.var,cluster == j)
+    currCentroid[[as.character(j)]]$x <- centroid.clust$x
+    currCentroid[[as.character(j)]]$y <- centroid.clust$y
+  }
+  centroid.combined.x <- 0
+  centroid.combined.y <- 0
+  for(k in names(currCentroid)){
+    centroid.combined.x <- centroid.combined.x + currCentroid[[k]]$x
+    centroid.combined.y <- centroid.combined.y + currCentroid[[k]]$y
+  }
+  varCentroid.x <- centroid.combined.x/3
+  varCentroid.y <- centroid.combined.y/3
+  newCentroid <- data.frame(variant=i,x=varCentroid.x,y=varCentroid.y)
+  varCentroid <- rbind(varCentroid,newCentroid)
+}
+
+varCentroid$phenotype <- c("LQTS","LQTS","LQTS","CPVT","CPVT","Wildtype")
+ggplot(varCentroid,aes(x=x,y=y,shape=variant,color=phenotype)) +
+  geom_point() +
+  labs(title="unweighted")
+
+dist.D130G <- sqrt((varCentroid[varCentroid$variant == "wildtype",]$x - varCentroid[varCentroid$variant == "D130G",]$x)^2 + 
+                    (varCentroid[varCentroid$variant == "wildtype",]$y - varCentroid[varCentroid$variant == "D130G",]$y)^2 )
+dist.D96V <- sqrt((varCentroid[varCentroid$variant == "wildtype",]$x - varCentroid[varCentroid$variant == "D96V",]$x)^2 + 
+                    (varCentroid[varCentroid$variant == "wildtype",]$y - varCentroid[varCentroid$variant == "D96V",]$y)^2 )
+dist.F142L <- sqrt((varCentroid[varCentroid$variant == "wildtype",]$x - varCentroid[varCentroid$variant == "F142L",]$x)^2 + 
+                    (varCentroid[varCentroid$variant == "wildtype",]$y - varCentroid[varCentroid$variant == "F142L",]$y)^2 )
+dist.N54I <- sqrt((varCentroid[varCentroid$variant == "wildtype",]$x - varCentroid[varCentroid$variant == "N54I",]$x)^2 + 
+                    (varCentroid[varCentroid$variant == "wildtype",]$y - varCentroid[varCentroid$variant == "N54I",]$y)^2 )
+dist.N98S <- sqrt((varCentroid[varCentroid$variant == "wildtype",]$x - varCentroid[varCentroid$variant == "N98S",]$x)^2 + 
+                    (varCentroid[varCentroid$variant == "wildtype",]$y - varCentroid[varCentroid$variant == "N98S",]$y)^2 )
+
+print(c("D130G",dist.D130G))
+print(c("D96V",dist.D96V))
+print(c("F142L",dist.F142L))
+print(c("N54I",dist.N54I))
+print(c("N98S",dist.N98S))
+
+```
+
+
+```{r plotCAMStruct,echo=FALSE,eval=FALSE}
+load("camFeatures.clust.RData")
+library(ggplot2)
+
+allData <- camFeatures.clust
+wt <- subset(allData,Variant=="wildtype")
+#apoEF3 <- subset(allData,Variant=="apoEF3")
+#apoEF4 <- subset(allData,Variant=="apoEF4")
+D96V <- subset(allData,Variant=="D96V")
+D130G <- subset(allData,Variant=="D130G")
+N54I <- subset(allData,Variant=="N54I")
+F142L <- subset(allData,Variant=="F142L")
+N98S <- subset(allData,Variant=="N98S")
+
+myCol <- c("blue","cyan", "red","hotpink","orange","green","darkgrey","cyan")
+names(myCol) <- c("D96V","apoEF3","D130G","F142L","apoEF4","N54I","wildtype","N98S")
+
+for (mut in c("wt","D96V","D130G","F142L","N54I","N98S")){
+  struct = eval(parse(text = mut))
+  struct$Cluster = as.factor(struct$Cluster)
+  print(ggplot(struct,aes(y=linkerDist,x=Dihedral,
+                      #group=Variant,
+                      #color=Variant,
+                      color=Cluster,
+                      fill=Variant))+
+#          geom_point(shape=".") +
+  geom_point() +
+          stat_ellipse() +
+          theme_classic() +
+          coord_cartesian(ylim=c(21,27),xlim=c(0,60)) +
+          #scale_color_manual(name="Variant",values=myCol) +
+          ggtitle("Calmodulin Conformational Shifts in Mutant Structures") +
+          labs(x="Dihedral (deg)",y="Linker Distance (\305)")
+      )
+    
+}
+
+
+mutCompare <- rbind(wt,D96V,D130G,N54I)
+ggplot(mutCompare,aes(y=linkerDist,x=Dihedral,
+  group=Variant,color=Variant,fill=Variant))+
+  geom_point(shape=".") +
+  stat_ellipse() +
+  stat_ellipse(data=wt,size=1) +
+  theme_classic() +
+  coord_cartesian(ylim=c(21,27),xlim=c(0,60)) +
+  scale_color_manual(name="Variant",values=myCol) +
+  ggtitle("Calmodulin Conformational Shifts in Mutant Structures")+
+  labs(x="Dihedral (deg)",y="Linker Distance (\305)")
+
+mutCompare <- rbind(wt,D96V,D130G,N54I,F142L)
+ggplot(mutCompare,aes(y=linkerDist,x=Dihedral,
+  group=Variant,color=Variant,fill=Variant))+
+  geom_point(shape=".") +
+  stat_ellipse() +
+  stat_ellipse(data=wt,size=1) +
+  theme_classic() +
+  coord_cartesian(ylim=c(21,27),xlim=c(0,60)) +
+  scale_color_manual(name="Variant",values=myCol) +
+  ggtitle("Calmodulin Conformational Shifts in Mutant Structures")+
+  labs(x="Dihedral (deg)",y="Linker Distance (\305)")
+
+mutCompare <- rbind(wt,D96V,D130G,N54I,F142L)
+ggplot(mutCompare,aes(y=linkerDist,x=Dihedral,
+  group=Variant,color=Variant,fill=Variant))+
+  geom_point(shape=".") +
+  stat_ellipse() +
+  stat_ellipse(data=wt,size=1) +
+  theme_classic() +
+  coord_cartesian(ylim=c(21,27),xlim=c(0,60)) +
+  scale_color_manual(name="Variant",values=myCol) +
+  ggtitle("Calmodulin Conformational Shifts in Mutant Structures")+
+  labs(x="Dihedral (deg)",y="Linker Distance (\305)")
+
+mutCompare <- rbind(wt,D96V,D130G,F142L)
+ggplot(mutCompare,aes(y=linkerDist,x=Dihedral,
+  group=Variant,color=Variant,fill=Variant))+
+  geom_point(shape=".") +
+  stat_ellipse() +
+  stat_ellipse(data=wt,size=1) +
+  theme_classic() +
+  coord_cartesian(ylim=c(21,27),xlim=c(0,60)) +
+  scale_color_manual(name="Variant",values=myCol) +
+  ggtitle("Calmodulin Conformational Shifts in Mutant Structures")+
+  labs(x="Dihedral (deg)",y="Linker Distance (\305)")
+
+mutCompare <- rbind(wt,N98S,N54I)
+ggplot(mutCompare,aes(y=linkerDist,x=Dihedral,
+  group=Variant,color=Variant,fill=Variant))+
+  geom_point(shape=".") +
+  stat_ellipse() +
+  stat_ellipse(data=wt,size=1) +
+  theme_classic() +
+  coord_cartesian(ylim=c(21,27),xlim=c(0,60)) +
+  scale_color_manual(name="Variant",values=myCol) +
+  ggtitle("Calmodulin Conformational Shifts in Mutant Structures")+
+  labs(x="Dihedral (deg)",y="Linker Distance (\305)")
+
+
+ggplot(allData,aes(y=linkerDist,x=Dihedral,
+  group=Variant,color=Variant,fill=Variant))+
+  geom_point(data=wt, shape=".") +
+  stat_ellipse() +
+  theme_classic() +
+  coord_cartesian(ylim=c(21,27),xlim=c(0,60)) +
+  scale_color_manual(name="Variant",values=myCol) +
+  ggtitle("Calmodulin Conformational Shifts in Mutant Structures")+
+  labs(x="Dihedral (deg)",y="Linker Distance (\305)")
+
+
+
+```
+
+```{r calcInclustion,echo=FALSE,eval=TRUE}
+load("camFeatures.clust.RData")
+
+
+allData <- camFeatures.clust
+variant <- vector()
+variant$wildtype <- subset(allData,Variant=="wildtype")[,c(3,4)]
+variant$D96V <- subset(allData,Variant=="D96V")[,c(3,4)]
+variant$D130G <- subset(allData,Variant=="D130G")[,c(3,4)]
+variant$N54I <- subset(allData,Variant=="N54I")[,c(3,4)]
+variant$F142L <- subset(allData,Variant=="F142L")[,c(3,4)]
+variant$N98S <- subset(allData,Variant=="N98S")[,c(3,4)]
+
+#wt center of circle
+
+ellipse <- function(xf1, yf1, xf2, yf2, k, new=TRUE,...){
+    # xf1 and yf1 are the coordinates of your focus F1
+    # xf2 and yf2 are the coordinates of your focus F2
+    # k is your constant (sum of distances to F1 and F2 of any points on the ellipse)
+    # new is a logical saying if the function needs to create a new plot or add an ellipse to an existing plot.
+    # ... is any arguments you can pass to functions plot or lines (col, lwd, lty, etc.)
+    t <- seq(0, 2*pi, by=pi/100)  # Change the by parameters to change resolution
+    k/2 -> a  # Major axis
+    xc <- (xf1+xf2)/2
+    yc <- (yf1+yf2)/2  # Coordinates of the center
+    dc <- sqrt((xf1-xf2)^2 + (yf1-yf2)^2)/2  # Distance of the foci to the center
+    b <- sqrt(a^2 - dc^2)  # Minor axis
+    phi <- atan(abs(yf1-yf2)/abs(xf1-xf2))  # Angle between the major axis and the x-axis
+    xt <- xc + a*cos(t)*cos(phi) - b*sin(t)*sin(phi)
+    yt <- yc + a*cos(t)*sin(phi) + b*sin(t)*cos(phi)
+    if(new){ plot(xt,yt,type="l",...) }
+    if(!new){ lines(xt,yt,...) }
+    }
+
+
+x.mean <- mean(variant[["wildtype"]]$Dihedral)
+y.mean <- mean(variant[["wildtype"]]$linkerDist)
+xoffset = 11
+yoffset = 0.2
+rotation = 0
+
+xf1 = x.mean + xoffset
+yf1 = y.mean + yoffset
+
+xf2 = x.mean - xoffset
+yf2 = y.mean - yoffset
+
+k = 2*xoffset +0.2
+
+plot(variant[["wildtype"]]$Dihedral,variant[["wildtype"]]$linkerDist,pch=".")
+ellipse(xf1,yf1,xf2,yf2,k,new=FALSE,col="red")
+
+a <- k/2 #major axis
+dc <- sqrt((xf1-xf2)^2 + (yf1-yf2)^2)/2  # Distance of the foci to the center
+b <- sqrt(a^2 - dc^2)  # Minor axis
+
+#varPercent <- data.frame(varNames = c("wildtype","apoEF3","apoEF4","D96V","D130G","F142L","N54I","N98S"))
+varPercent <- data.frame(varNames = c("wildtype","D96V","D130G","F142L","N54I","N98S"))
+percentInside.all <- vector()
+#varPercent$varNames = c("wildtype","apoEF3","apoEF4","D96V","D130G","F142L","N54I") 
+for (i in varPercent$varNames){
+  xnorm = variant[[i]]$Dihedral - x.mean
+  ynorm = variant[[i]]$linkerDist - y.mean
+
+  inside = (xnorm^2/a^2) + (ynorm)^2/b^2
+  percentInside = length(inside[inside < 1])/length(inside)
+  percentInside.all = c(percentInside.all,percentInside)
+}
+varPercent$overlap = percentInside.all
+
+myCol <- c("blue","cyan", "red","hotpink","orange","green","darkgrey")
+names(myCol) <- c("D96V","N98S","D130G","F142L","apoEF4","N54I","wildtype")
+
+library(ggplot2)
+ggplot(varPercent,aes(x=varNames,y=overlap,fill=varNames)) +
+  scale_fill_manual(name="varNames",values=myCol) +
+  geom_bar(stat="identity")
+
+
+```
+
+```{r plotCombinedGlobalCAM,echo=FALSE,eval=FALSE}
+
+load("camFeatures.clust.RData")
+combinedData <- camFeatures.clust
+combinedData$Cluster <- as.factor(combinedData$Cluster)
+
+library(ggplot2)
+
+wtset <- subset(combinedData,Variant == "wildtype")
+wtset$Nonbond <- 0
+wtset$Clobe_IQ_dist <- 0
+wtset$Nlobe_IQ_dist <- 0
+wtset$Cluster <- 0
+
+for (var in levels(combinedData$Variant)){
+  combined.subset <- subset(combinedData,Variant == var)
+  combined.subset <- rbind(wtset,combined.subset)
+    print(
+    ggplot(combined.subset,aes(x=Dihedral,y=linkerDist,color=Nonbond,shape=Cluster))+ 
+    geom_point(size=2) +
+    scale_colour_gradientn(colours=rainbow(4),limit=c(-1350,-430),name="kcal/mol") +
+    scale_y_continuous(limits=c(21,27)) +
+    scale_x_continuous(limits=c(0,60)) +
+    theme(legend.text=element_text(size=15),axis.title=element_text(size=15)) +
+    labs(title=paste(var,"CAM Global Structural Features - NonBonded Energy",sep=" "))+
+    xlab("Dihedral (\305)")+
+    ylab("LinkerDist (\305)")
+  )
+}
+for (var in levels(combinedData$Variant)){
+  combined.subset <- subset(combinedData,Variant == var)
+  combined.subset <- rbind(wtset,combined.subset)
+  print(
+    ggplot(combined.subset,aes(x=Dihedral,y=linkerDist,color=Clobe_IQ_dist,shape=Cluster))+ 
+    geom_point(size=2) +
+    scale_colour_gradientn(colours=rainbow(4),limit=c(6,12),name="\305") +
+    scale_y_continuous(limits=c(21,27)) +
+    scale_x_continuous(limits=c(0,60)) +
+    theme(legend.text=element_text(size=15),axis.title=element_text(size=15)) +
+    labs(title=paste(var,"CAM Global Structural Features - Clobe:IQ Distance",sep=" "))+
+    xlab("Dihedral (\305)")+
+    ylab("LinkerDist (\305)")
+  )
+}
+for (var in levels(combinedData$Variant)){
+  combined.subset <- subset(combinedData,Variant == var)
+  combined.subset <- rbind(wtset,combined.subset)
+  print(
+    ggplot(combined.subset,aes(x=Dihedral,y=linkerDist,color=Nlobe_IQ_dist,shape=Cluster))+ 
+    geom_point(size=2) +
+    scale_colour_gradientn(colours=rainbow(4),limit=c(11.5,18.5),name="\305") +
+    scale_y_continuous(limits=c(21,27)) +
+    scale_x_continuous(limits=c(0,60)) +
+    theme(legend.text=element_text(size=15),axis.title=element_text(size=15)) +
+    labs(title=paste(var,"CAM Global Structural Features - Nlobe:IQ Distance",sep=" "))+
+    xlab("Dihedral (\305)") +
+    ylab("LinkerDist (\305)")
+  )
+}
+```
+
+```{r plotCombined_LobeDist,echo=FALSE,eval=FALSE}
+
+load("camFeatures.clust.RData")
+combinedData <- camFeatures.clust
+combinedData$Cluster <- as.factor(combinedData$Cluster)
+
+library(ggplot2)
+
+wtset <- subset(combinedData,Variant == "wildtype")
+wtset$Nonbond <- 0
+wtset$Dihedral <- 0
+wtset$linkerDist <- 0
+wtset$Cluster <- 0
+
+for (var in levels(combinedData$Variant)){
+  combined.subset <- subset(combinedData,Variant == var)
+  combined.subset <- rbind(wtset,combined.subset)
+    print(
+    ggplot(combined.subset,aes(x=Clobe_IQ_dist,y=Nlobe_IQ_dist,color=Nonbond,shape=Cluster))+ 
+    geom_point(size=2) +
+    scale_colour_gradientn(colours=rainbow(4),limit=c(-1350,-430),name="kcal/mol") +
+    scale_y_continuous(limits=c(11.5,18.5)) +
+    scale_x_continuous(limits=c(6,12)) +
+    theme(legend.text=element_text(size=15),axis.title=element_text(size=15)) +
+    labs(title=paste(var,"CAM Lobe:IQ Distance - NonBonded Energy",sep=" "))+
+    xlab("C-Lobe:IQ Dist (\305)")+
+    ylab("N-Lobe:IQ Dist (\305)")
+  )
+}
+for (var in levels(combinedData$Variant)){
+  combined.subset <- subset(combinedData,Variant == var)
+  combined.subset <- rbind(wtset,combined.subset)
+  print(
+    ggplot(combined.subset,aes(x=Clobe_IQ_dist,y=Nlobe_IQ_dist,color=linkerDist,shape=Cluster))+ 
+    geom_point(size=2) +
+    scale_colour_gradientn(colours=rainbow(4),limit=c(21.5,26.5),name="\305") +
+    scale_y_continuous(limits=c(11.5,18.5)) +
+    scale_x_continuous(limits=c(6,12)) +
+    theme(legend.text=element_text(size=15),axis.title=element_text(size=15)) +
+    labs(title=paste(var,"CAM Lobe:IQ Distance - Linker Distance",sep=" "))+
+    xlab("C-Lobe:IQ Dist (\305)")+
+    ylab("N-Lobe:IQ Dist (\305)")
+  )
+}
+for (var in levels(combinedData$Variant)){
+  combined.subset <- subset(combinedData,Variant == var)
+  combined.subset <- rbind(wtset,combined.subset)
+  print(
+    ggplot(combined.subset,aes(x=Clobe_IQ_dist,y=Nlobe_IQ_dist,color=Dihedral,shape=Cluster))+ 
+    geom_point(size=2) +
+    scale_colour_gradientn(colours=rainbow(4),limit=c(12.1,47),name="deg") +
+    scale_y_continuous(limits=c(11.5,18.5)) +
+    scale_x_continuous(limits=c(6,12)) +
+    theme(legend.text=element_text(size=15),axis.title=element_text(size=15)) +
+    labs(title=paste(var,"CAM Lobe:IQ Distance - Linker Dihedral",sep=" "))+
+    xlab("C-Lobe:IQ Dist (\305)") +
+    ylab("N-Lobe:IQ Dist (\305)")
+  )
+}
+```
+
+```{r findRepStruct,echo=FALSE,eval=FALSE}
+load("camFeatures.clust.RData")
+camVar <- camFeatures.clust
+camVar$clustID <- paste(camVar$Variant,"-",camVar$Cluster,sep ="")
+
+
+clustNames <- names(summary(factor(camVar$clustID)))
+
+#currClust <- clustNames[1]
+for (currClust in clustNames){
+  currClust.matrix <- subset(camVar,clustID == currClust)
+  currClust.dist <- as.matrix(dist(currClust.matrix[,c(3:6,8:10)]))
+  row.names(currClust.dist) <- paste(currClust.matrix$Variant,"-",currClust.matrix$Structure,sep="")
+  structDist <- rowSums(currClust.dist)
+  print(c(currClust,names(structDist[structDist == min(structDist)])))
+}
+```
+
