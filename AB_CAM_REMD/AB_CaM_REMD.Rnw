@@ -1,0 +1,604 @@
+\documentclass{article}
+
+\begin{document}
+\SweaveOpts{concordance=TRUE}
+
+<<>>=
+
+load("Abeta.dataRMSF.RData")
+load("Abeta.dataRAW.RData")
+load("CaM_RMSF.RData")
+@
+
+Random Forest
+<<>>=
+
+library(randomForest)
+library(dplyr)
+#PCA 
+abeta.pca <- prcomp(abeta1[,3:84], center = TRUE, scale. = TRUE)
+#Make dataframe from PC's
+df.abeta.x <- as.data.frame(abeta.pca$x)
+#Alternatively, one can simply perform RF on PhiPsi matrix alone to find top dihedral angles
+#df.abeta.x <- as.data.frame(abeta1[,3:84])
+df.abeta.x$groups <- abeta1$grouping
+#Matrix is usually too big, get a random sample
+Sample<- sample_n(df.abeta.x[,1:83], 10000)
+#Execute RF then print the plot of important variables, can set seed for reproducibility or add more trees
+set.seed(444)
+AB.rf <- randomForest(groups~.,data=Sample,importance=TRUE,ntree=50, proximity=TRUE)
+print(AB.rf)
+varImpPlot(AB.rf,
+            n.var = 15,
+            pch=19,
+             main= "Random Forest AB",
+             col="darkgreen",
+             gcolor="blue",
+             lcolor="black")
+@
+
+Euclidean Distance Calculations
+<<>>=
+#Upload the matrix of RMSF PhiPsi values from the VMD trajectory
+#Here we use at least the top 5 PC's generated from the RF output. Below is an example
+abeta.pca <- prcomp(abeta1[,3:82], center = TRUE, scale. = TRUE)
+df.abeta.x <- as.data.frame(abeta.pca$x)
+#Aggregate the PC's
+df.abeta.x$groups <- abeta1$grouping
+pca.centroids <- aggregate(df.abeta.x[,1:81], list(Type = df.abeta.x$groups), mean)
+#Find the distance
+dist(rbind(pca.centroids[pca.centroids$Type == "WT",c(2:15)],pca.centroids[pca.centroids$Type == "A42T",c(2:15)]), method = "euclidean")
+dist(rbind(pca.centroids[pca.centroids$Type == "WT",c(2:15)],pca.centroids[pca.centroids$Type == "D7N",c(2:15)]), method = "euclidean")
+dist(rbind(pca.centroids[pca.centroids$Type == "WT",c(2:15)],pca.centroids[pca.centroids$Type == "A21G",c(2:15)]), method = "euclidean")
+dist(rbind(pca.centroids[pca.centroids$Type == "WT",c(2:15)],pca.centroids[pca.centroids$Type == "E22G",c(2:15)]), method = "euclidean")
+dist(rbind(pca.centroids[pca.centroids$Type == "WT",c(2:15)],pca.centroids[pca.centroids$Type == "L34V",c(2:15)]), method = "euclidean")
+dist(rbind(pca.centroids[pca.centroids$Type == "WT",c(2:15)],pca.centroids[pca.centroids$Type == "E22K",c(2:15)]), method = "euclidean")
+dist(rbind(pca.centroids[pca.centroids$Type == "WT",c(2:15)],pca.centroids[pca.centroids$Type == "E22Q",c(2:15)]), method = "euclidean")
+dist(rbind(pca.centroids[pca.centroids$Type == "WT",c(2:15)],pca.centroids[pca.centroids$Type == "D23N",c(2:15)]), method = "euclidean")
+dist(rbind(pca.centroids[pca.centroids$Type == "WT",c(2:15)],pca.centroids[pca.centroids$Type == "E3D",c(2:15)]), method = "euclidean")
+dist(rbind(pca.centroids[pca.centroids$Type == "WT",c(2:15)],pca.centroids[pca.centroids$Type == "E22D",c(2:15)]), method = "euclidean")
+@
+
+#Abeta graph of distance vs onset
+<<>>=
+distance<-c(0,3.1,3.7,3.9,3.8,5.3,5.5,5.9,5.7,6.4,5.7)
+Onset <- c(70,70,70,68.9,63,60,60,57.5,55,55,46.2)
+pred <-  c(70.0,	69.1,	68.4,	68.0,	68.2,	62.0,	60.2,	55.4,	58.0,	45.9,	58.0)
+x = distance
+y = Onset
+CamNames = c("WT","E22D", "E3D", "D23N","A42T","L34V","D7N", "E22G","E22Q","E22K","A21G")
+par(mar = c(5,5,3,1))
+require(maptools)
+xl <- seq(0, 6.4, 0.05)
+spl <- smooth.spline(x, pred)
+plot(x, y, col="red", pch=16, ylim = c(30,80),xlim = c(0,7), main="Amyloid Beta Euclidean Distance vs Age of Onset", xlab=("Euclidean Distance"), ylab=("Age of Onset"))
+lines(predict(spl, xl), lwd=2 ,  col="blue")
+points(x, pred, pch=16, col="blue")
+z= c(0,3.1,3.7,4.1,3.8,5.2,5.65,6,5.7,6.4,5.7)
+text(z, y, labels = paste("  ", CamNames, "  ", sep=""), cex=0.9,  pos = 2, offset = 0.5)
+#pointLabel(x, y, labels = paste("  ", CamNames, "  ", sep=""), cex=.6)
+cor(Onset,pred, method = "pearson")
+cor(Onset,pred, method = "spearman")
+@
+
+KNN testing for overall pathogenicity accuracy, the same KNN methods were used for CaM REMD data
+<<>>=
+library(class)
+abeta.pca <- prcomp(abeta2[,3:82], center = TRUE, scale. = TRUE)
+df.abeta.x <- as.data.frame(abeta.pca$x)
+df.abeta.x$groups <- abeta2$grouping
+df.abeta.x$type <- abeta2$phenotype1
+abeta3 <- df.abeta.x
+set.seed(444)
+test <- abeta2[abeta3$groups %in% c("E22D", "A21G"), ] 
+train <- abeta2[abeta3$groups %in% c("WT", "D23N", "E22G", "E3D","L34V","E22K","A42T", "D7N", "E22Q"), ]
+AB_train <- train[,c(3:78)]
+AB_test <- test[,c(3:78)]
+AB_target_category <- train[,1]
+AB_test_category <- test[,1]
+set.seed(444)
+pr <- knn1(AB_train,AB_test,cl=AB_target_category)
+tab <- table(pr,AB_test_category)
+tab
+##This function divides the correct predictions by total number of predictions that tell us how accurate the model is.
+accuracy <- function(x){sum(diag(x)/(sum(rowSums(x)))) * 100}
+accuracy(tab)
+tab
+@
+
+#KNN for yes/no predictions pathogenicity
+<<>>=
+#This can be performed on RMSF or PhiPsi raw matrix values, generally unprocessed PhiPsi values give better KNN separation values but RMSF's give more accurate Euclidean distance values
+abeta.pca <- prcomp(abeta2[,3:84], center = TRUE, scale. = TRUE)
+df.abeta.x <- as.data.frame(abeta.pca$x)
+df.abeta.x$groups <- abeta2$grouping
+df.abeta.x$type <- abeta2$phenotype1
+pca.centroids <- aggregate(df.abeta.x[,1:82], list(Type = df.abeta.x$type, Groups = df.abeta.x$groups ), mean)
+#Here we only pull out 1 at a time
+test <- pca.centroids[pca.centroids$Groups%in% c("A21G"), ] 
+train <- pca.centroids[pca.centroids$Groups%in% c(  "L34V", "D23N","D7N", "E22K", "A42T", "E22Q",  "E22G", "E22D", "E3D","WT"), ]
+abeta_train <- train[,c(3:7)]
+abeta_test <- test[,c(3:7)]
+abeta_target_category <- train[,1]
+abeta_test_category <- test[,1]
+set.seed(444)
+predicted <- knn(abeta_train,abeta_test,cl=abeta_target_category)
+tab <- table(predicted,abeta_test_category)
+library(caret)
+accuracy <- function(x){sum(diag(x)/(sum(rowSums(x)))) * 100}
+accuracy(tab)
+tab
+test <- pca.centroids[pca.centroids$Groups%in% c("L34V"), ] 
+train <- pca.centroids[pca.centroids$Groups%in% c(  "A21G", "D23N","D7N", "E22K", "A42T", "E22Q",  "E22G", "E22D", "E3D","WT"), ]
+abeta_train <- train[,c(3:7)]
+abeta_test <- test[,c(3:7)]
+abeta_target_category <- train[,1]
+abeta_test_category <- test[,1]
+set.seed(444)
+predicted <- knn(abeta_train,abeta_test,cl=abeta_target_category)
+tab <- table(predicted,abeta_test_category)
+library(caret)
+accuracy <- function(x){sum(diag(x)/(sum(rowSums(x)))) * 100}
+accuracy(tab)
+tab
+test <- pca.centroids[pca.centroids$Groups%in% c("D23N"), ] 
+train <- pca.centroids[pca.centroids$Groups%in% c(  "L34V", "A21G","D7N", "E22K", "A42T", "E22Q",  "E22G", "E22D", "E3D","WT"), ]
+abeta_train <- train[,c(3:7)]
+abeta_test <- test[,c(3:7)]
+abeta_target_category <- train[,1]
+abeta_test_category <- test[,1]
+set.seed(444)
+predicted <- knn(abeta_train,abeta_test,cl=abeta_target_category)
+tab <- table(predicted,abeta_test_category)
+library(caret)
+accuracy <- function(x){sum(diag(x)/(sum(rowSums(x)))) * 100}
+accuracy(tab)
+tab
+test <- pca.centroids[pca.centroids$Groups%in% c("D7N"), ] 
+train <- pca.centroids[pca.centroids$Groups%in% c(  "L34V", "D23N","A21G", "E22K", "A42T", "E22Q",  "E22G", "E22D", "E3D","WT"), ]
+abeta_train <- train[,c(3:7)]
+abeta_test <- test[,c(3:7)]
+abeta_target_category <- train[,1]
+abeta_test_category <- test[,1]
+set.seed(444)
+predicted <- knn(abeta_train,abeta_test,cl=abeta_target_category)
+tab <- table(predicted,abeta_test_category)
+library(caret)
+accuracy <- function(x){sum(diag(x)/(sum(rowSums(x)))) * 100}
+accuracy(tab)
+tab
+test <- pca.centroids[pca.centroids$Groups%in% c("E22K"), ] 
+train <- pca.centroids[pca.centroids$Groups%in% c(  "L34V", "D23N","D7N", "A21G", "A42T", "E22Q",  "E22G", "E22D", "E3D","WT"), ]
+abeta_train <- train[,c(3:7)]
+abeta_test <- test[,c(3:7)]
+abeta_target_category <- train[,1]
+abeta_test_category <- test[,1]
+set.seed(444)
+predicted <- knn(abeta_train,abeta_test,cl=abeta_target_category)
+tab <- table(predicted,abeta_test_category)
+library(caret)
+accuracy <- function(x){sum(diag(x)/(sum(rowSums(x)))) * 100}
+accuracy(tab)
+tab
+test <- pca.centroids[pca.centroids$Groups%in% c("A42T"), ] 
+train <- pca.centroids[pca.centroids$Groups%in% c(  "L34V", "D23N","D7N", "E22K", "A21G", "E22Q",  "E22G", "E22D", "E3D","WT"), ]
+abeta_train <- train[,c(3:7)]
+abeta_test <- test[,c(3:7)]
+abeta_target_category <- train[,1]
+abeta_test_category <- test[,1]
+set.seed(444)
+predicted <- knn(abeta_train,abeta_test,cl=abeta_target_category)
+tab <- table(predicted,abeta_test_category)
+library(caret)
+accuracy <- function(x){sum(diag(x)/(sum(rowSums(x)))) * 100}
+accuracy(tab)
+tab
+test <- pca.centroids[pca.centroids$Groups%in% c("E22Q"), ] 
+train <- pca.centroids[pca.centroids$Groups%in% c(  "L34V", "D23N","D7N", "E22K", "A42T", "A21G",  "E22G", "E22D", "E3D","WT"), ]
+abeta_train <- train[,c(3:7)]
+abeta_test <- test[,c(3:7)]
+abeta_target_category <- train[,1]
+abeta_test_category <- test[,1]
+set.seed(444)
+predicted <- knn(abeta_train,abeta_test,cl=abeta_target_category)
+tab <- table(predicted,abeta_test_category)
+library(caret)
+accuracy <- function(x){sum(diag(x)/(sum(rowSums(x)))) * 100}
+accuracy(tab)
+tab
+test <- pca.centroids[pca.centroids$Groups%in% c("E22G"), ] 
+train <- pca.centroids[pca.centroids$Groups%in% c(  "L34V", "D23N","D7N", "E22K", "A42T", "E22Q",  "A21G", "E22D", "E3D","WT"), ]
+abeta_train <- train[,c(3:7)]
+abeta_test <- test[,c(3:7)]
+abeta_target_category <- train[,1]
+abeta_test_category <- test[,1]
+set.seed(444)
+predicted <- knn(abeta_train,abeta_test,cl=abeta_target_category)
+tab <- table(predicted,abeta_test_category)
+library(caret)
+accuracy <- function(x){sum(diag(x)/(sum(rowSums(x)))) * 100}
+accuracy(tab)
+tab
+test <- pca.centroids[pca.centroids$Groups%in% c("E22D"), ] 
+train <- pca.centroids[pca.centroids$Groups%in% c(  "L34V", "D23N","D7N", "E22K", "A42T", "E22Q",  "A21G", "E22G", "E3D","WT"), ]
+abeta_train <- train[,c(3:7)]
+abeta_test <- test[,c(3:7)]
+abeta_target_category <- train[,1]
+abeta_test_category <- test[,1]
+set.seed(444)
+predicted <- knn(abeta_train,abeta_test,cl=abeta_target_category)
+tab <- table(predicted,abeta_test_category)
+library(caret)
+accuracy <- function(x){sum(diag(x)/(sum(rowSums(x)))) * 100}
+accuracy(tab)
+tab
+test <- pca.centroids[pca.centroids$Groups%in% c("E3D"), ] 
+train <- pca.centroids[pca.centroids$Groups%in% c(  "L34V", "D23N","D7N", "E22K", "A42T", "E22Q",  "A21G", "E22D", "E22G","WT"), ]
+abeta_train <- train[,c(3:7)]
+abeta_test <- test[,c(3:7)]
+abeta_target_category <- train[,1]
+abeta_test_category <- test[,1]
+set.seed(444)
+predicted <- knn(abeta_train,abeta_test,cl=abeta_target_category)
+tab <- table(predicted,abeta_test_category)
+library(caret)
+accuracy <- function(x){sum(diag(x)/(sum(rowSums(x)))) * 100}
+accuracy(tab)
+tab
+test <- pca.centroids[pca.centroids$Groups%in% c("WT"), ] 
+train <- pca.centroids[pca.centroids$Groups%in% c(  "L34V", "D23N","D7N", "E22K", "A42T", "E22Q",  "A21G", "E22D", "E3D","E22G"), ]
+abeta_train <- train[,c(3:7)]
+abeta_test <- test[,c(3:7)]
+abeta_target_category <- train[,1]
+abeta_test_category <- test[,1]
+set.seed(444)
+predicted <- knn(abeta_train,abeta_test,cl=abeta_target_category)
+tab <- table(predicted,abeta_test_category)
+library(caret)
+accuracy <- function(x){sum(diag(x)/(sum(rowSums(x)))) * 100}
+accuracy(tab)
+tab
+@
+
+#KNN for yes/no predictions phenotype, double PCA used
+<<>>=
+#After pathogenicity is determined we test the pathogenic variants for a phenotype
+library(class)
+abeta.pca <- prcomp(abeta1[,3:84], center = TRUE, scale. = TRUE)
+df.abeta.x <- as.data.frame(abeta.pca$x)
+df.abeta.x$groups <- abeta1$grouping
+pca.centroids <- aggregate(df.abeta.x[,1:82], list(Type = df.abeta.x$groups), mean)
+abeta.pca <- prcomp(pca.centroids[,c(2:83)], center = TRUE, scale. = TRUE)
+df.abeta.x <- as.data.frame(abeta.pca$x)
+df.abeta.x$groups <- pca.centroids$Type
+pca.centroids<-df.abeta.x
+pca.centroids$type <- c("AD1","AD1","CAA","AD1","NP","AD1","CAA","CAA","NP","CAA","NP")
+pairs(df.abeta.x[,1:10], col= c("blue", "blue", "red","blue", "grey", "blue", "red","red","grey","red","green") , pch=17 )
+abeta5 <- pca.centroids
+set.seed(444)
+test <- abeta5[abeta5$groups %in% c("A21G"), ]
+train <- abeta5[abeta5$groups %in% c( "E22K", "D23N","D7N","A42T","L34V","E22G", "E22Q"), ]
+abeta_train <- train[,c(2,10)]
+abeta_test <- test[,c(2,10)]
+abeta_target_category <- train[,13]
+abeta_test_category <- test[,13]
+set.seed(444)
+predicted <- knn(abeta_train,abeta_test,cl=abeta_target_category, k=1)
+tab <- table(predicted,abeta_test_category)
+tab
+test <- abeta5[abeta5$groups %in% c("E22K"), ]
+train <- abeta5[abeta5$groups %in% c( "A21G", "D23N","D7N","A42T","L34V","E22G", "E22Q"), ]
+abeta_train <- train[,c(2,10)]
+abeta_test <- test[,c(2,10)]
+abeta_target_category <- train[,13]
+abeta_test_category <- test[,13]
+set.seed(444)
+predicted <- knn(abeta_train,abeta_test,cl=abeta_target_category, k=1)
+tab <- table(predicted,abeta_test_category)
+tab
+test <- abeta5[abeta5$groups %in% c("D23N"), ]
+train <- abeta5[abeta5$groups %in% c( "E22K", "A21G","D7N","A42T","L34V","E22G", "E22Q"), ]
+abeta_train <- train[,c(2,10)]
+abeta_test <- test[,c(2,10)]
+abeta_target_category <- train[,13]
+abeta_test_category <- test[,13]
+set.seed(444)
+predicted <- knn(abeta_train,abeta_test,cl=abeta_target_category, k=1)
+tab <- table(predicted,abeta_test_category)
+tab
+test <- abeta5[abeta5$groups %in% c("D7N"), ]
+train <- abeta5[abeta5$groups %in% c( "E22K", "D23N","A21G","A42T","L34V","E22G", "E22Q"), ]
+abeta_train <- train[,c(2,10)]
+abeta_test <- test[,c(2,10)]
+abeta_target_category <- train[,13]
+abeta_test_category <- test[,13]
+set.seed(444)
+predicted <- knn(abeta_train,abeta_test,cl=abeta_target_category, k=1)
+tab <- table(predicted,abeta_test_category)
+tab
+test <- abeta5[abeta5$groups %in% c("A42T"), ]
+train <- abeta5[abeta5$groups %in% c( "E22K", "D23N","D7N","A21G","L34V","E22G", "E22Q"), ]
+abeta_train <- train[,c(2,10)]
+abeta_test <- test[,c(2,10)]
+abeta_target_category <- train[,13]
+abeta_test_category <- test[,13]
+set.seed(444)
+predicted <- knn(abeta_train,abeta_test,cl=abeta_target_category, k=1)
+tab <- table(predicted,abeta_test_category)
+tab
+test <- abeta5[abeta5$groups %in% c("L34V"), ]
+train <- abeta5[abeta5$groups %in% c( "E22K", "D23N","D7N","A42T","A21G","E22G", "E22Q"), ]
+abeta_train <- train[,c(2,10)]
+abeta_test <- test[,c(2,10)]
+abeta_target_category <- train[,13]
+abeta_test_category <- test[,13]
+set.seed(444)
+predicted <- knn(abeta_train,abeta_test,cl=abeta_target_category, k=1)
+tab <- table(predicted,abeta_test_category)
+tab
+test <- abeta5[abeta5$groups %in% c("E22G"), ]
+train <- abeta5[abeta5$groups %in% c( "E22K", "D23N","D7N","A42T","L34V","A21G", "E22Q"), ]
+abeta_train <- train[,c(2,10)]
+abeta_test <- test[,c(2,10)]
+abeta_target_category <- train[,13]
+abeta_test_category <- test[,13]
+set.seed(444)
+predicted <- knn(abeta_train,abeta_test,cl=abeta_target_category, k=1)
+tab <- table(predicted,abeta_test_category)
+tab
+test <- abeta5[abeta5$groups %in% c("E22Q"), ]
+train <- abeta5[abeta5$groups %in% c( "E22K", "D23N","D7N","A42T","L34V","E22G", "A21G"), ]
+abeta_train <- train[,c(2,10)]
+abeta_test <- test[,c(2,10)]
+abeta_target_category <- train[,13]
+abeta_test_category <- test[,13]
+set.seed(444)
+predicted <- knn(abeta_train,abeta_test,cl=abeta_target_category, k=1)
+tab <- table(predicted,abeta_test_category)
+tab
+@
+
+3D Graph
+<<>>=
+
+library(rgl)
+library(car)
+##Right click and drag to label
+##PCA
+abeta.pca <- prcomp(abeta2[,c(3:84)], center = TRUE, scale. = TRUE)
+df.abeta.x$groups <- abeta2$grouping
+df.abeta.x <- as.data.frame(abeta.pca$x)
+pca.centroids <- aggregate(df.abeta.x[,1:82], list(Type = abeta2$grouping), mean)
+pairs(pca.centroids[,8:12], col= c("blue", "blue", "red", "blue", "grey", "blue","red","red", "grey", "red", "green") , pch=17 )
+df.abeta.x$groups <- abeta1$grouping
+#Average of each PC's, use pairs plot for best separation
+ x = pca.centroids[, 2
+]
+ y = pca.centroids[, 6
+]
+ z = pca.centroids[, 7
+]
+shapes <- (as.numeric(0,0,1,2,0,0,1,1,2,1,3))
+scatter3d(x,y,z ,point.col = c("red", "red", "blue", "red", "grey", "red","blue","blue", "grey", "blue", "green") ,    surface = FALSE,  grid = TRUE, pch=shapes)
+Identify3d(x, y, z, axis.scales=TRUE, groups = NULL, labels = c("A21G", "A42T", "D23N", "D7N","E22D","E22G", "E22K", "E22Q", "E3D", "L34V", "WT"), offset = ((100/length(x))^(1/1.5)) * 0.02, col = "black")
+#rgl.postscript("persp3dd4.pdf","pdf") #This writes the image to your directory
+@
+
+Karplus
+<<>>=
+
+library(zoo)
+library(imputeTS)
+library(BBmisc)
+library(pracma)
+Kar=data.frame((((cos(abeta1[32902:36195,3:84]-60))^2)*6.4)-(1.4*cos(abeta1[32902:36195,3:84]-60))+1.9)
+Kar.new = Kar[ , !c(TRUE, FALSE) ]
+KarAve= matrix(colMeans(Kar.new))
+KarAve1= c(t(KarAve))
+KarAve1=data.frame(KarAve1)
+#Please note that we did not have all of the values for the comparisons, therefore we extrapolated and normalized all data.
+#Replacing missing values with 'NA' gives us the Jcoupling of the simulation that is analagous to the experimental values.
+JcouplingSim <- c(NA,NA,5.10592,5.07897,5.07541,NA,5.07991,NA,NA,NA,5.05032,5.10299,5.13064,NA,NA,NA,5.12146,5.12539,5.16178,5.15108,5.02473,
+5.10283,NA,5.16576,NA,5.12517,NA,NA,NA,NA,5.1517,5.0761,NA,5.0768,NA,NA,NA,NA,NA,5.1075,5.0781,5.0625)
+#From literature
+Jcoupling1 <- c( NA,NA,6.345318964,6.826446703,7.431052221,NA,5.94888109,
+NA,NA,NA,6.145009595,6.329799421,7.71219893,NA,NA,NA,6.562636352,8.216573151,7.673017008,7.573923956,4.993323751,5.82012798,NA,7.276185125,
+NA,5.460683093,NA,NA,NA,NA,8.076218689,7.063486388,NA,6.692440151,NA,
+NA,NA,NA,NA,7.924897667,8.591187351,6.911837027)
+#From literature
+Jcoupling2 <- c( NA,NA,6.419,6.345,7.172,NA,NA,6.640,NA,NA,6.466,NA,
+7.255,NA,NA,6.551,NA,7.747,NA,NA,5.388,5.870,NA,6.461,NA,6.424,NA,NA,
+NA,NA,7.224,7.298,NA,NA,NA,NA,NA,NA,NA,7.740,8.097,6.443)
+#Correlation Values
+cor.test(Jcoupling1,JcouplingSim, method="pearson")
+cor.test(Jcoupling2,JcouplingSim, method="pearson")
+Jcoupling1N <- normalize(Jcoupling1, method = "standardize", range = c(0, 1), margin = 1L, on.constant = "quiet")
+JcouplingSimN <- normalize(JcouplingSim, method = "standardize", range = c(0, 1), margin = 1L, on.constant = "quiet")
+Jcoupling2N <- normalize(Jcoupling2, method = "standardize", range = c(0, 1), margin = 1L, on.constant = "quiet")
+#Using interpolation
+JcouplingSimN<- na_interpolation(JcouplingSimN)
+Jcoupling1N <- na_interpolation(Jcoupling1N)
+Jcoupling2N <- na_interpolation(Jcoupling2N)
+JcouplingSimN <- JcouplingSimN[-(1:2)]
+Jcoupling1N <- Jcoupling1N[-(1:2)]
+Jcoupling2N <- Jcoupling2N[-(1:2)]
+JcouplingSimN <- c(NA,NA,JcouplingSimN)
+Jcoupling1N <- c(NA,NA,Jcoupling1N)
+Jcoupling2N <- c(NA,NA,Jcoupling2N)
+ylab.text = expression('Normalized   '^"3"*'J'['HNHA'])
+plot(JcouplingSimN, type = "o",col = "black", xlab = "Residue", ylab = "", main="J-coupling Consistency" ,ylim = c(-3,3), lwd=2) 
+lines(Jcoupling1N, type = "o", col = "blue", lwd=2)
+lines(Jcoupling2N, type = "o", col = "red", lwd=2)
+legend(-.5, 3.2, legend=c("Simulation", "Exp. Set 1 (Jresolved SOFAST-HMQC)", "Exp. Set 2 (HNHA)"), col=c("black", "blue", "red"), lty=5, cex=.4, lwd=3)
+mtext(ylab.text,side=2, line =2.5)
+@
+
+RandomForestCaM
+<<>>=
+
+library(randomForest)
+library(dplyr)
+set.seed(1)
+CaM.pca <- prcomp(CaM1[,3:292], center = TRUE, scale. = TRUE)
+df.CaM.x <- as.data.frame(CaM.pca$x)
+df.CaM.x$groups <- CaM1$grouping
+Sample<- sample_n(df.CaM.x, 9000, replace = TRUE)
+CaM.rf <- randomForest(groups~.,data=Sample,importance=TRUE,ntree=100, proximity=TRUE)
+print(CaM.rf)
+varImpPlot(CaM.rf,
+            n.var = 15,
+            pch=19,
+             main= "Random Forest Calmodulin",
+             col="darkblue",
+             gcolor="blue",
+             lcolor="black")
+@
+
+Euclidean Distances
+<<>>=
+
+library(ggbiplot)
+CaM.pca <- prcomp(CaM1[,3:292], center = TRUE, scale. = TRUE)
+df.CaM.x <- as.data.frame(CaM.pca$x)
+df.CaM.x$groups <- CaM1$grouping
+pca.centroids <- aggregate(df.CaM.x[,1:290], list(Type = df.CaM.x$groups), mean)
+#RF found that the first PC was lower on the list of accuracy, whenever that happens we use PC's that are further down for classification and measurements
+dist(rbind(pca.centroids[pca.centroids$Type == "WT",c(4:8)],pca.centroids[pca.centroids$Type == "D96V",c(4:8)]), method = "euclidean")
+dist(rbind(pca.centroids[pca.centroids$Type == "WT",c(4:8)],pca.centroids[pca.centroids$Type == "D130G",c(4:8)]), method = "euclidean")
+dist(rbind(pca.centroids[pca.centroids$Type == "WT",c(4:8)],pca.centroids[pca.centroids$Type == "E141G",c(4:8)]), method = "euclidean")
+dist(rbind(pca.centroids[pca.centroids$Type == "WT",c(4:8)],pca.centroids[pca.centroids$Type == "E141V",c(4:8)]), method = "euclidean")
+dist(rbind(pca.centroids[pca.centroids$Type == "WT",c(4:8)],pca.centroids[pca.centroids$Type == "F142L",c(4:8)]), method = "euclidean")
+dist(rbind(pca.centroids[pca.centroids$Type == "WT",c(4:8)],pca.centroids[pca.centroids$Type == "D79E",c(4:8)]), method = "euclidean")
+dist(rbind(pca.centroids[pca.centroids$Type == "WT",c(4:8)],pca.centroids[pca.centroids$Type == "E119D",c(4:8)]), method = "euclidean")
+@
+
+CaM plots. For these plots, the Euclidean distances are typed in manually
+<<>>=
+
+cacamkd<- c(2.3,2.3,2.3,12.4,31.3,78.2,27,54)
+distance <- c(0,1.89,1.87, 2.36,2.79,2.61,1.72,4.04)
+pred<- c(3.6, 16.3, 16.3, 23.5,33.2,28.9,14.1,89.9)
+x=distance
+y=cacamkd
+CamNames = c("WT","","NC", "F142L","D96V","D130G","E141G", "E141V")
+par(mar = c(5,5,3,1))
+xl <- seq(0, 4.04, 0.05)
+spl <- smooth.spline(x, pred)
+plot(x, y, col="red", pch=16, ylim = c(0,90),xlim = c(0,5), main="Euclidean Distance vs Ca-CaM kd", xlab=("Euclidean Distance"), ylab=("Ca-CaM kd [uM]"))
+lines(predict(spl, xl), lwd=2 ,  col="blue")
+points(x, pred, pch=16, col="blue")
+text(x,y, labels=CamNames, cex=0.7, font=2, pos = 3)
+#Correlations
+cor(cacamkd,pred, method = c( "spearman"))
+cor(cacamkd,pred, method = c("pearson")) 
+@
+
+#PLOTS FROM CAM ENERGY DISTANCES
+#RyRpo
+<<>>=
+distance<- c(0,3.45,3.72)
+RyRpo <-c(0.7,0.96,1.1)
+pred <- c(0.693,1.016,1.047)
+x=distance
+y=RyRpo
+CamNames = c("WT","N54I", "N98S")
+par(mar = c(5,5,3,1))
+xl <- seq(0,3.45,3.72)
+plot(x,y, col="red", pch=16, ylim=c(.7,1.2), main="Euclidean Distance vs RyR Po", xlab=("Euclidean Distance"), ylab=("RyR Po"))
+lines(predict(spl, xl), lwd=2 ,  col="blue")
+points(x, pred, pch=16, col="blue")
+text(x,y, labels=CamNames, cex=0.7, font=2, pos = 3)
+dat<-data.frame(x,y)
+loessFit <- loess(y~x, dat, span = 0.6)
+loessFit <- data.frame(x=loessFit$x,y=loessFit$fitted)
+loessFit <- loessFit[order(loessFit$x),]
+approxFit <- approx(dat,n = 15)
+lowessFit <-data.frame(lowess(dat,f = .6,iter=1))
+z= seq(0,3.72, by=0.01)
+q = .6951 + ((0.0729)*z^1.2) 
+lines(z,y=q, col="blue",lwd=2)
+#Correlations
+cor(RyRpo,pred, method = c( "spearman"))
+cor(RyRpo,pred, method = c("pearson")) 
+@
+
+CacamKd
+<<>>=
+
+cacamkd<- c(2.3,12.4,31.3,78.2)
+distance <- c(0,1.88,2.68,2.74)
+pred<- c(2.0576,17.29885397,42.80437235,45.81402446)
+CamDist = data.frame(distance, cacamkd)
+x = CamDist
+cor(x,y = NULL, method = c( "spearman"))
+cor(x,y = NULL) #PEARSON
+x=distance
+y=cacamkd
+CamNames = c("WT","F142L","D96V", "D130G")
+par(mar = c(5,5,3,1))
+xl <- seq(0, 2.78, 0.05)
+spl <- smooth.spline(x, pred)
+plot(x, y, col="red", pch=16, ylim = c(0,95),xlim = c(0,3), main="Euclidean Distance vs Ca-CaM kd", xlab=("Euclidean Distance"), ylab=("Ca-CaM kd [uM]"))
+lines(predict(spl, xl), lwd=2 ,  col="blue")
+points(x, pred, pch=16, col="blue")
+text(x,y, labels=CamNames, cex=0.7, font=2, pos = 3)
+cor(cacamkd,pred, method = c( "spearman"))
+cor(cacamkd,pred, method = c("pearson"))
+@
+
+Escapes
+<<>>=
+
+distance<-  c(0,1.88,2.68,2.74)
+escapes <- c(5,9,20,30)
+pred <-  c(5.7,8.49,23.32,26.24)
+escapeDist = data.frame(distance, escapes)
+x = escapeDist
+cor(x,y = NULL, method = c( "spearman"))
+cor(x,y = NULL) #PEARSON
+x=distance
+y=escapes
+CamNames = c("WT","F142L","D96V", "D130G")
+par(mar = c(5,5,3,1))
+xy = data.frame(x,y)
+xl <- seq(0, 2.78, 0.05)
+spl <- smooth.spline(x, pred)
+plot(x, y, col="red", pch=16, ylim = c(0,35),xlim = c(0,3), main="Euclidean Distance vs Escapes", xlab=("Euclidean Distance"), ylab=("Escapes"))
+lines(predict(spl, xl), lwd=2 ,  col="blue")
+points(x, pred, pch=16, col="blue")
+text(x,y, labels=CamNames, cex=0.7, font=2, pos = 3)
+cor(escapes,pred, method = c( "spearman"))
+cor(escapes,pred, method = c("pearson"))
+@
+
+3D CaM
+<<>>=
+##Right click and drag to label
+
+library(rgl)
+library(car)
+CaM.pca <- prcomp(CaM1[,c(3:290)], center = TRUE, scale. = TRUE)
+df.CaM.x <- as.data.frame(CaM.pca$x)
+df.CaM.x$groups <- CaM1$grouping
+pca.centroids <- aggregate(df.CaM.x[,1:288], list(Type = df.CaM.x$groups), mean)
+pca.centroids<-pca.centroids[-c(8), ]
+df.CaM.x$groups <- CaM1$grouping
+df.CaM.x$phenotype <- CaM1$phenotype1
+ x = pca.centroids[, 4
+]
+ y = pca.centroids[, 5
+]
+ z = pca.centroids[, 7
+]
+shapes <- (as.numeric(0,1,0,1,0,0,0,2,4:8))
+scatter3d(x,y,z ,point.col = c("red","grey", "red", "grey", "red", "red",  "red","blue","blue",  "green") ,    surface = FALSE,  grid = TRUE, pch=shapes)
+Identify3d(x, y, z, axis.scales=TRUE, groups = NULL, labels = c("D129G","D79E","D96V","E119D","E141G","E141V","F142L","N54I","N98S","WT"
+),
+	offset = ((100/length(x))^(1/1.5)) * 0.02, col = "black")
+@
+
+
+
+
+
+\end{document}
