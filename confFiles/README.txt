@@ -1,1 +1,1 @@
-NAMD configuration Files used to run simulations.
+NAMD configuration files used to run simulations.
